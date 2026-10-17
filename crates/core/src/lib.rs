@@ -13,6 +13,7 @@ pub mod jobs;
 pub mod layout;
 pub mod model_manager;
 pub mod models;
+pub mod power;
 pub mod queue;
 pub mod store;
 pub mod transcript;

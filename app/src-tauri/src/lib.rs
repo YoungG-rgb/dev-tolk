@@ -93,6 +93,8 @@ pub fn run() {
                 cleanup.orphans_removed.len()
             );
             app.manage(store);
+            // Запрет сна на время обработки: исполнитель очереди (MVP-016) вызывает `sync_with_queue` после переходов.
+            app.manage(std::sync::Mutex::new(tolk_core::power::SleepInhibitor::new()));
 
             log::info!(
                 "dev-tolk {} запущен ({} {}), данные: {}",
