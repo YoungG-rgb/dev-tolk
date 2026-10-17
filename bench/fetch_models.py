@@ -51,12 +51,14 @@ def fetch(model: dict, dest_dir: Path) -> Path:
             have = 0
         mode = "ab" if have else "wb"
         with part.open(mode) as out:
-            done = have
+            done, shown = have, -1
             while block := resp.read(1 << 20):
                 out.write(block)
                 done += len(block)
-                print(f"\r{model['id']}: {done / 1e6:.0f} / {model['size'] / 1e6:.0f} МБ", end="", flush=True)
-    print()
+                decile = done * 10 // model["size"]
+                if decile != shown:  # не чаще раза на 10%
+                    shown = decile
+                    print(f"{model['id']}: {done / 1e6:.0f} / {model['size'] / 1e6:.0f} МБ", flush=True)
     if part.stat().st_size != model["size"]:
         raise SystemExit(f"{model['id']}: размер {part.stat().st_size} вместо {model['size']}; файл оставлен как .part")
     actual = sha256_file(part)
