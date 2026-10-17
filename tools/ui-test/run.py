@@ -123,6 +123,105 @@ def list_scenario(app, models, model, f1, tmp):
         print(f"каталогов заданий на диске перед удалением: {at_delete[-1] if at_delete else '?'}; после: {dw.samples[-1][1]}")
 
 
+def init_db(app, data, tmp):
+    """Первый запуск создаёт базу (миграции); дальше её можно заполнять напрямую."""
+    proc = launch(app, None, tmp / "seed.log", data)
+    for _ in range(100):
+        if (data / "tolk.db").exists():
+            break
+        time.sleep(0.1)
+    time.sleep(1.5)
+    proc.kill()
+    proc.wait()
+
+
+def seed_transcript_job(data, con, name, segments):
+    import uuid
+
+    job_id = str(uuid.uuid4())
+    d = data / "jobs" / job_id
+    d.mkdir(parents=True)
+    doc = {
+        "version": 1,
+        "engine": "seed",
+        "model": "small-q5_1",
+        "language": "ru",
+        "duration_ms": segments * 4000,
+        "segments": [
+            {"start_ms": i * 4000, "end_ms": i * 4000 + 3500, "text": f"Сегмент {i + 1}: обсуждаем план работ и сроки проекта."}
+            for i in range(segments)
+        ],
+    }
+    text = json.dumps(doc, ensure_ascii=False, indent=2)
+    (d / "original.json").write_text(text)
+    (d / "transcript.json").write_text(text)
+    now = int(time.time() * 1000)
+    con.execute(
+        "INSERT INTO jobs (id, source_name, audio_path, duration_ms, status, progress, created_at, updated_at, finished_at)"
+        " VALUES (?, ?, 'source.mp3', ?, 'COMPLETED', 100, ?, ?, ?)",
+        (job_id, name, segments * 4000, now, now, now),
+    )
+    return job_id
+
+
+def edit_scenario(app, models, model, tmp):
+    import sqlite3
+
+    data = new_data(tmp, "data-edit", models)
+    init_db(app, data, tmp)
+    con = sqlite3.connect(data / "tolk.db")
+    with con:
+        small = seed_transcript_job(data, con, "small.mp3", 5)
+        long_ = seed_transcript_job(data, con, "long.mp3", 2000)
+    con.close()
+    subs = {"@MODEL@": model}
+
+    def db_state(job_id):
+        c = sqlite3.connect(data / "tolk.db")
+        row = c.execute("SELECT has_edits FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        c.close()
+        return row[0] if row else None
+
+    def segment_texts(job_id, name="transcript.json"):
+        return [x["text"] for x in json.loads((data / "jobs" / job_id / name).read_text())["segments"]]
+
+    log = tmp / "edit.log"
+    proc = launch(app, prepare("edit.js", subs, tmp, "E"), log, data)
+    closing = wait_step(log, "E-closing", 120)
+    t0 = time.time()
+    exited = None
+    if closing and closing["step"] == "E-closing":
+        try:
+            proc.wait(timeout=15)
+            exited = time.time() - t0
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    else:
+        proc.kill()
+    show("правка транскрипта", log)
+    print(f"закрытие окна с несохранённой правкой: приложение завершилось за {exited:.2f} с" if exited is not None else "закрытие окна с несохранённой правкой: приложение НЕ завершилось")
+    log_file = data / "logs" / "tolk.log"
+    deferred = log_file.exists() and "Закрытие окна отложено" in log_file.read_text()
+    print("в журнале приложения есть запись об отложенном закрытии:", deferred)
+    texts = segment_texts(small)
+    print("на диске после закрытия: сегмент 4 =", texts[3], "| has_edits в базе =", db_state(small),
+          "| original.json не изменён:", segment_texts(small, "original.json")[3].startswith("Сегмент 4"))
+
+    log2 = tmp / "edit-verify.log"
+    proc = launch(app, prepare("edit-verify.js", subs, tmp, "V"), log2, data)
+    wait_step(log2, "V-done", 60)
+    proc.kill()
+    show("после перезапуска", log2)
+
+    log3 = tmp / "long.log"
+    proc = launch(app, prepare("long.js", subs, tmp, "G"), log3, data)
+    wait_step(log3, "LONG-done", 120)
+    proc.kill()
+    show("расшифровка на 2000 сегментов", log3)
+    t = segment_texts(long_)
+    print("на диске: сегмент 1001 =", t[1000], "| has_edits в базе =", db_state(long_), "| сегментов:", len(t))
+
+
 def bulk_scenario(app, models, model, tmp, count=200):
     import sqlite3
 
@@ -195,6 +294,7 @@ def main():
         import_scenario(app, models, model, tmp)
         list_scenario(app, models, model, f1, tmp)
         bulk_scenario(app, models, model, tmp)
+        edit_scenario(app, models, model, tmp)
         w = Watcher()
         w.start()
 

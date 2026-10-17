@@ -1,18 +1,23 @@
 //! Команды очереди и истории для интерфейса (MVP-016, MVP-019).
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{Manager, State};
+use tolk_core::editing::{self, EditView};
 use tolk_core::executor::{Executor, JobEvent};
-use tolk_core::export::group_paragraphs;
 use tolk_core::import::ImportEvent;
 use tolk_core::jobs::{self, Job};
 use tolk_core::queue;
 use tolk_core::store::Store;
 use tolk_core::user_errors;
+
+/// Сколько ждать ответа страницы на запрос сохранения при закрытии окна.
+const FLUSH_TIMEOUT: Duration = Duration::from_secs(6);
 
 /// Всё, что приложение сообщает интерфейсу о заданиях и импорте (разные значения `kind`).
 #[derive(Debug, Clone, Serialize)]
@@ -20,6 +25,15 @@ use tolk_core::user_errors;
 pub enum AppEvent {
     Job(JobEvent),
     Import(ImportEvent),
+    Request(EditorRequest),
+}
+
+/// Запросы приложения к странице.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum EditorRequest {
+    /// Сохранить несохранённые правки и подтвердить закрытие окна (`editor_close_now`).
+    FlushAndClose,
 }
 
 /// Каналы, в которые рассылаются события (по одному на подписавшееся окно).
@@ -43,6 +57,7 @@ pub struct JobDto {
     progress: u8,
     model_id: Option<String>,
     attempts: u32,
+    has_edits: bool,
     error_code: Option<String>,
     error_message: Option<String>,
     error_action: Option<String>,
@@ -64,6 +79,7 @@ impl From<Job> for JobDto {
             progress: j.progress,
             model_id: j.model_id,
             attempts: j.attempts,
+            has_edits: j.has_edits,
             error_code: j.error_code,
             error_message: j.error_message,
             error_action,
@@ -175,49 +191,123 @@ pub fn job_delete(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Paragraph {
+pub struct SegmentDto {
     start_ms: u64,
+    end_ms: u64,
     text: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TranscriptView {
+pub struct EditDto {
     title: String,
     model: String,
     duration_ms: u64,
     has_edits: bool,
-    paragraphs: Vec<Paragraph>,
+    segments: Vec<SegmentDto>,
 }
 
-/// Текст готового задания для просмотра: рабочая копия, а при её отсутствии оригинал.
+impl From<EditView> for EditDto {
+    fn from(v: EditView) -> Self {
+        Self {
+            title: v.title,
+            model: v.model,
+            duration_ms: v.duration_ms,
+            has_edits: v.has_edits,
+            segments: v
+                .segments
+                .into_iter()
+                .map(|s| SegmentDto {
+                    start_ms: s.start_ms,
+                    end_ms: s.end_ms,
+                    text: s.text,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Расшифровка готового задания для просмотра и правки: рабочая копия, при её порче — оригинал.
 #[tauri::command]
-pub fn job_transcript(store: State<'_, Arc<Store>>, id: String) -> Result<TranscriptView, String> {
-    let job = {
-        let conn = store.db.conn();
-        jobs::get(&conn, &id)
-            .map_err(|e| user_error(&e))?
-            .ok_or_else(|| user_error(&tolk_core::StoreError::JobNotFound(id.clone())))?
-    };
-    let bytes = [("transcript.json"), ("original.json")]
-        .iter()
-        .find_map(|name| store.files.read(&id, name).transpose())
-        .transpose()
-        .map_err(|e| user_error(&e))?
-        .ok_or("Файл с расшифровкой не найден.")?;
-    let transcript =
-        tolk_core::transcript::Transcript::from_json(&bytes).map_err(|e| user_error(&e))?;
-    Ok(TranscriptView {
-        title: job.source_name,
-        model: transcript.model.clone(),
-        duration_ms: transcript.duration_ms,
-        has_edits: job.has_edits,
-        paragraphs: group_paragraphs(&transcript)
-            .into_iter()
-            .map(|b| Paragraph {
-                start_ms: b.start_ms,
-                text: b.text,
-            })
-            .collect(),
-    })
+pub fn transcript_load(store: State<'_, Arc<Store>>, id: String) -> Result<EditDto, String> {
+    editing::load(&store, &id)
+        .map(Into::into)
+        .map_err(|e| user_error(&e))
+}
+
+/// Сохраняет тексты сегментов (по одному на сегмент). Возвращает, отличается ли результат от оригинала.
+#[tauri::command]
+pub fn transcript_save(
+    store: State<'_, Arc<Store>>,
+    id: String,
+    texts: Vec<String>,
+) -> Result<bool, String> {
+    editing::save_texts(&store, &id, &texts).map_err(|e| user_error(&e))
+}
+
+/// «Вернуть исходный текст».
+#[tauri::command]
+pub fn transcript_revert(store: State<'_, Arc<Store>>, id: String) -> Result<EditDto, String> {
+    editing::revert(&store, &id)
+        .map(Into::into)
+        .map_err(|e| user_error(&e))
+}
+
+/// Состояние редактора для закрытия окна: есть ли несохранённые правки и ответила ли страница на запрос
+/// сохранения. Без ответа страницы (она «зависла») окно закрывается само через `FLUSH_TIMEOUT`.
+#[derive(Default)]
+pub struct EditorState {
+    dirty: AtomicBool,
+    acked: AtomicBool,
+}
+
+impl EditorState {
+    pub fn is_dirty(&self) -> bool {
+        self.dirty.load(Ordering::SeqCst)
+    }
+}
+
+#[tauri::command]
+pub fn editor_set_dirty(editor: State<'_, Arc<EditorState>>, dirty: bool) {
+    editor.dirty.store(dirty, Ordering::SeqCst);
+}
+
+/// Страница получила запрос сохранить правки перед закрытием.
+#[tauri::command]
+pub fn editor_ack_flush(editor: State<'_, Arc<EditorState>>) {
+    editor.acked.store(true, Ordering::SeqCst);
+}
+
+/// Правки сохранены (или отброшены пользователем): закрыть окно.
+#[tauri::command]
+pub fn editor_close_now(app: tauri::AppHandle, editor: State<'_, Arc<EditorState>>) {
+    editor.dirty.store(false, Ordering::SeqCst);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.close();
+    }
+}
+
+/// Закрытие окна при несохранённых правках: окно остаётся, странице отправляется запрос сохранить.
+/// Возвращает `true`, если закрытие нужно отложить.
+pub fn defer_close_for_unsaved(
+    window: &tauri::Window,
+    editor: &Arc<EditorState>,
+    subscribers: &Subscribers,
+) -> bool {
+    if !editor.is_dirty() {
+        return false;
+    }
+    log::info!("Закрытие окна отложено: есть несохранённые правки, страница сохраняет их");
+    editor.acked.store(false, Ordering::SeqCst);
+    subscribers.publish(AppEvent::Request(EditorRequest::FlushAndClose));
+    let (window, editor) = (window.clone(), Arc::clone(editor));
+    std::thread::spawn(move || {
+        std::thread::sleep(FLUSH_TIMEOUT);
+        if editor.is_dirty() && !editor.acked.load(Ordering::SeqCst) {
+            log::error!("Страница не ответила на запрос сохранения, окно закрывается");
+            editor.dirty.store(false, Ordering::SeqCst);
+            let _ = window.close();
+        }
+    });
+    true
 }

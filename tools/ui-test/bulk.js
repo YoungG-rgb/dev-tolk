@@ -11,12 +11,12 @@
     const before = batches();
     await inv('import_paths', { paths: ['/нет/такого/файла.mp3'] });
     await waitFor(() => batches() > before, 10000, 'refresh');
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await sleep(0); // кадры не рисуются, пока окно скрыто, поэтому ждём не requestAnimationFrame
     const refreshMs = Math.round(performance.now() - t0);
     const l0 = performance.now();
     const rows = [...document.querySelectorAll('.jobs li')];
     const firstChips = rows.slice(0, 3).map((li) => li.dataset.status);
-    await rep({ step: 'B200', rows: n, refreshMs, lag: takeLag(), firstChips, scrollHeight: document.documentElement.scrollHeight, layoutMs: Math.round(performance.now() - l0) });
+    await rep({ step: 'B200', rows: n, visible: document.visibilityState, refreshMs, lag: takeLag(), firstChips, scrollHeight: document.documentElement.scrollHeight, layoutMs: Math.round(performance.now() - l0) });
     await rep({ step: 'B200-done' });
   } catch (e) {
     await rep({ step: 'error', message: String(e) });

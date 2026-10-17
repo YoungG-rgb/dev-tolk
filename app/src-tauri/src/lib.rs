@@ -80,7 +80,12 @@ macro_rules! handlers {
             queue_commands::job_cancel,
             queue_commands::job_retry,
             queue_commands::job_delete,
-            queue_commands::job_transcript,
+            queue_commands::transcript_load,
+            queue_commands::transcript_save,
+            queue_commands::transcript_revert,
+            queue_commands::editor_set_dirty,
+            queue_commands::editor_ack_flush,
+            queue_commands::editor_close_now,
             import_commands::import_pick,
             import_commands::import_cancel
         ]
@@ -98,7 +103,12 @@ macro_rules! handlers {
             queue_commands::job_cancel,
             queue_commands::job_retry,
             queue_commands::job_delete,
-            queue_commands::job_transcript,
+            queue_commands::transcript_load,
+            queue_commands::transcript_save,
+            queue_commands::transcript_revert,
+            queue_commands::editor_set_dirty,
+            queue_commands::editor_ack_flush,
+            queue_commands::editor_close_now,
             import_commands::import_pick,
             import_commands::import_cancel,
             import_commands::import_paths,
@@ -166,6 +176,7 @@ pub fn run() {
             executor.spawn();
             app.manage(store);
             app.manage(subscribers);
+            app.manage(Arc::new(queue_commands::EditorState::default()));
             app.manage(import_commands::ImportState::default());
             app.manage(executor);
 
@@ -187,7 +198,13 @@ pub fn run() {
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 import_commands::start_import(window.app_handle(), paths.clone());
             }
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Несохранённые правки: окно не закрывается, страница сначала сохраняет их.
+                let editor = window.state::<Arc<queue_commands::EditorState>>();
+                if queue_commands::defer_close_for_unsaved(window, &editor, &window.state::<Arc<queue_commands::Subscribers>>()) {
+                    api.prevent_close();
+                    return;
+                }
                 window.state::<import_commands::ImportState>().cancel();
                 let executor = window.state::<Arc<Executor>>();
                 executor.shutdown();

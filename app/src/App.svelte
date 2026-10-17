@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Channel, invoke } from '@tauri-apps/api/core';
   import JobItem from './lib/JobItem.svelte';
-  import TranscriptView from './lib/TranscriptView.svelte';
+  import TranscriptEditor from './lib/TranscriptEditor.svelte';
   import { sortJobs } from './lib/format';
   import type { AppEvent, Job, TranscriptData } from './lib/types';
 
@@ -15,7 +15,8 @@
   let message = $state<string | null>(null);
   let importing = $state<{ name: string; index: number; total: number; percent: number | null } | null>(null);
   let importNotes = $state<ImportNote[]>([]);
-  let transcript = $state<TranscriptData | null>(null);
+  let transcript = $state<{ id: string; data: TranscriptData } | null>(null);
+  let editor = $state<{ save: () => Promise<boolean> } | undefined>();
   // Сколько пакетов импорта завершилось (счётчик для автопроверки в окне).
   let batches = $state(0);
 
@@ -51,6 +52,9 @@
           importing = null;
           batches += 1;
           void refresh();
+          return;
+        case 'flushAndClose':
+          void flushAndClose();
           return;
         case 'importBusy':
           message = 'Импорт уже идёт: дождитесь окончания или отмените его.';
@@ -108,13 +112,25 @@
   const remove = (id: string) => run(() => invoke('job_delete', { id }));
   const open = (id: string) =>
     run(async () => {
-      transcript = await invoke<TranscriptData>('job_transcript', { id });
+      transcript = { id, data: await invoke<TranscriptData>('transcript_load', { id }) };
     });
+
+  // Закрытие окна при несохранённых правках: приложение просит сохранить и ждёт подтверждения.
+  async function flushAndClose() {
+    await invoke('editor_ack_flush');
+    if (!editor || (await editor.save())) await invoke('editor_close_now');
+    // Не сохранилось: окно остаётся открытым, редактор показывает ошибку и варианты.
+  }
 </script>
 
 <main data-batches={batches}>
   {#if transcript}
-    <TranscriptView data={transcript} onBack={() => (transcript = null)} />
+    {#key transcript.id}
+      <TranscriptEditor bind:this={editor} id={transcript.id} data={transcript.data} onBack={() => {
+          transcript = null;
+          void refresh(); // в списке появляется отметка «есть правки»
+        }} />
+    {/key}
   {:else}
     <header>
       <div>

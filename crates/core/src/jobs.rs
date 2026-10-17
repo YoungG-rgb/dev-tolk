@@ -202,3 +202,15 @@ pub fn delete_finished(conn: &Connection, id: &str) -> Result<bool> {
         }),
     }
 }
+
+/// Отмечает, отличается ли рабочая копия расшифровки от оригинала.
+pub fn set_has_edits(conn: &Connection, id: &str, has_edits: bool) -> Result<()> {
+    let changed = conn.execute(
+        "UPDATE jobs SET has_edits = ?1, updated_at = ?2 WHERE id = ?3",
+        rusqlite::params![has_edits as i64, now_ms(), id],
+    )?;
+    if changed == 0 {
+        return Err(StoreError::JobNotFound(id.to_string()));
+    }
+    Ok(())
+}

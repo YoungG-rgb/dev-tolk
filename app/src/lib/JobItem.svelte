@@ -22,7 +22,7 @@
 <li class="job" data-status={job.status}>
   <div class="main">
     <span class="name" title={job.sourceName}>{job.sourceName}</span>
-    <span class="meta">{clock(job.durationMs)} · {formatDate(job.createdAt)}</span>
+    <span class="meta">{clock(job.durationMs)} · {formatDate(job.createdAt)}{job.hasEdits ? ' · есть правки' : ''}</span>
     {#if job.errorMessage}
       <span class="error">{job.errorMessage} {job.errorAction ?? ''}</span>
     {/if}

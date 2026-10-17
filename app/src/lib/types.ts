@@ -7,6 +7,7 @@ export type Job = {
   durationMs: number | null;
   progress: number;
   attempts: number;
+  hasEdits: boolean;
   errorCode: string | null;
   errorMessage: string | null;
   errorAction: string | null;
@@ -23,12 +24,13 @@ export type AppEvent =
   | { kind: 'importAccepted'; index: number; name: string; jobId: string; warnings: string[] }
   | { kind: 'importRejected'; index: number; name: string; code: string; message: string; action: string }
   | { kind: 'importBatchDone'; total: number; accepted: number; rejected: number; cancelled: boolean }
-  | { kind: 'importBusy' };
+  | { kind: 'importBusy' }
+  | { kind: 'flushAndClose' };
 
 export type TranscriptData = {
   title: string;
   model: string;
   durationMs: number;
   hasEdits: boolean;
-  paragraphs: { startMs: number; text: string }[];
+  segments: { startMs: number; endMs: number; text: string }[];
 };
