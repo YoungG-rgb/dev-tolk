@@ -48,3 +48,14 @@ pub fn ui_test_close(app: AppHandle) {
         let _ = window.close();
     }
 }
+
+/// Выбирает модель по умолчанию (экрана «Модели» пока нет, MVP-024).
+#[tauri::command]
+pub fn ui_test_set_default_model(
+    store: tauri::State<'_, std::sync::Arc<tolk_core::store::Store>>,
+    id: String,
+) -> Result<(), String> {
+    let models_dir = store.files.layout().models_dir();
+    tolk_core::model_manager::set_default_model(&store.db, &models_dir, &id)
+        .map_err(|e| e.to_string())
+}

@@ -48,6 +48,16 @@ impl Store {
         })
     }
 
+    /// Удаляет завершённое задание (кнопка «Удалить»): запись и файлы. Задание в очереди или в
+    /// обработке не удаляется: сначала его нужно отменить.
+    pub fn delete_finished_job(&self, job_id: &str) -> Result<()> {
+        let existed = jobs::delete_finished(&self.db.conn(), job_id)?;
+        if !existed {
+            return Err(crate::error::StoreError::JobNotFound(job_id.to_string()));
+        }
+        self.files.delete_job_dir(job_id)
+    }
+
     /// Удаляет задание: сначала запись в базе, затем файлы. При сбое между шагами остаётся каталог без записи,
     /// его уберёт очистка при старте; обратный порядок оставил бы запись без файлов.
     pub fn delete_job(&self, job_id: &str) -> Result<bool> {

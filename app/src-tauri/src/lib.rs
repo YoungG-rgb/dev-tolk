@@ -79,9 +79,9 @@ macro_rules! handlers {
             queue_commands::jobs_subscribe,
             queue_commands::job_cancel,
             queue_commands::job_retry,
-            queue_commands::debug_models,
+            queue_commands::job_delete,
+            queue_commands::job_transcript,
             import_commands::import_pick,
-            import_commands::import_paths,
             import_commands::import_cancel
         ]
     };
@@ -97,10 +97,12 @@ macro_rules! handlers {
             queue_commands::jobs_subscribe,
             queue_commands::job_cancel,
             queue_commands::job_retry,
-            queue_commands::debug_models,
+            queue_commands::job_delete,
+            queue_commands::job_transcript,
             import_commands::import_pick,
-            import_commands::import_paths,
             import_commands::import_cancel,
+            import_commands::import_paths,
+            ui_test::ui_test_set_default_model,
             ui_test::ui_test_report,
             ui_test::ui_test_close
         ]

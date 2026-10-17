@@ -53,7 +53,9 @@ def prepare(script_name, subs, tmp, tag):
 
 def launch(app, script, log, data):
     exe = Path(app) / "Contents/MacOS/tolk-app"
-    env = dict(os.environ, TOLK_UI_TEST_SCRIPT=str(script), TOLK_UI_TEST_LOG=str(log), TOLK_UI_TEST_DATA=str(data))
+    env = dict(os.environ, TOLK_UI_TEST_LOG=str(log), TOLK_UI_TEST_DATA=str(data))
+    if script:
+        env["TOLK_UI_TEST_SCRIPT"] = str(script)
     return subprocess.Popen([str(exe)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -75,6 +77,84 @@ def show(title, log):
     print(f"--- {title} ---")
     for e in read_log(log):
         print(json.dumps(e, ensure_ascii=False))
+
+
+def new_data(tmp, name, models):
+    data = tmp / name
+    (data / "models").mkdir(parents=True)
+    for f in Path(models).glob("ggml-*.bin"):
+        (data / "models" / f.name).symlink_to(f)
+    return data
+
+
+class DirWatcher(threading.Thread):
+    """Следит за числом каталогов заданий на диске: (время мс, число)."""
+
+    def __init__(self, jobs_dir):
+        super().__init__(daemon=True)
+        self.jobs_dir = jobs_dir
+        self.samples = []
+        self.stop = False
+
+    def run(self):
+        last = None
+        while not self.stop:
+            n = len([d for d in self.jobs_dir.iterdir() if d.is_dir()]) if self.jobs_dir.exists() else 0
+            if n != last:
+                self.samples.append((int(time.time() * 1000), n))
+                last = n
+            time.sleep(0.03)
+
+
+def list_scenario(app, models, model, f1, tmp):
+    data = new_data(tmp, "data-list", models)
+    dw = DirWatcher(data / "jobs")
+    dw.start()
+    log = tmp / "list.log"
+    proc = launch(app, prepare("list.js", {"@MODEL@": model, "@F1@": f1}, tmp, "L"), log, data)
+    wait_step(log, "L-done", 240)
+    proc.kill()
+    dw.stop = True
+    show("экран очереди и удаление", log)
+    steps = {e["step"]: e["t"] for e in read_log(log)}
+    print("каталоги заданий на диске (время мс, число):", dw.samples)
+    if "L-before-delete" in steps and "L-deleted" in steps:
+        at_delete = [n for t, n in dw.samples if t <= steps["L-before-delete"]]
+        print(f"каталогов заданий на диске перед удалением: {at_delete[-1] if at_delete else '?'}; после: {dw.samples[-1][1]}")
+
+
+def bulk_scenario(app, models, model, tmp, count=200):
+    import sqlite3
+
+    data = new_data(tmp, "data-bulk", models)
+    log = tmp / "bulk.log"
+    # Первый запуск создаёт базу (миграции), затем она заполняется заранее.
+    proc = launch(app, None, tmp / "seed.log", data)
+    for _ in range(100):
+        if (data / "tolk.db").exists():
+            break
+        time.sleep(0.1)
+    time.sleep(1.5)
+    proc.kill()
+    proc.wait()
+    now = int(time.time() * 1000)
+    statuses = ["COMPLETED", "COMPLETED", "FAILED", "CANCELLED", "COMPLETED"]
+    con = sqlite3.connect(data / "tolk.db")
+    with con:
+        for i in range(count):
+            st = statuses[i % len(statuses)]
+            con.execute(
+                "INSERT INTO jobs (id, source_name, audio_path, duration_ms, status, progress, error_code, error_message, created_at, updated_at, finished_at)"
+                " VALUES (?, ?, 'source.mp3', ?, ?, ?, ?, ?, ?, ?, ?)",
+                (f"00000000-0000-4000-8000-{i:012d}", f"Запись {i + 1}.mp3", 600_000 + i * 1000, st, 100 if st == "COMPLETED" else 0,
+                 "INTERNAL" if st == "FAILED" else None, "Во время обработки произошла внутренняя ошибка." if st == "FAILED" else None,
+                 now - i * 60_000, now - i * 60_000, now - i * 60_000),
+            )
+    con.close()
+    proc = launch(app, prepare("bulk.js", {"@MODEL@": model}, tmp, "B"), log, data)
+    wait_step(log, "B200-done", 60)
+    proc.kill()
+    show(f"список из {count} записей", log)
 
 
 def import_scenario(app, models, model, tmp):
@@ -113,6 +193,8 @@ def main():
         for f in Path(models).glob("ggml-*.bin"):
             (data / "models" / f.name).symlink_to(f)
         import_scenario(app, models, model, tmp)
+        list_scenario(app, models, model, f1, tmp)
+        bulk_scenario(app, models, model, tmp)
         w = Watcher()
         w.start()
 

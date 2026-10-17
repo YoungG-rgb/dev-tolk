@@ -46,16 +46,15 @@ const counts = () => {
   return c;
 };
 async function setup(modelId) {
-  await waitFor(() => [...document.querySelectorAll('select option')].some((o) => !o.disabled), 10000, 'models');
-  setValue(q('select'), modelId, 'change');
-  await sleep(100);
+  await waitFor(() => q('main'), 10000, 'main');
+  await inv('ui_test_set_default_model', { id: modelId });
 }
-// Вводит путь и нажимает «Начать» — ставит файл в очередь.
+const batches = () => Number(q('main')?.dataset.batches ?? 0);
+// Ставит файл в очередь через команду импорта (диалог и перетаскивание системные) и ждёт конца пакета.
 async function enqueue(file) {
-  setValue(q('input[type="text"]'), file, 'input');
-  await sleep(60);
-  const b = button('Начать');
-  await waitFor(() => !b.disabled, 5000, 'enqueue enabled');
-  b.click();
+  const n = batches();
+  await inv('import_paths', { paths: [file] });
+  await waitFor(() => batches() > n, 180000, 'import batch done');
   await sleep(150);
 }
+const alertText = () => q('[role="alert"]')?.textContent ?? '';

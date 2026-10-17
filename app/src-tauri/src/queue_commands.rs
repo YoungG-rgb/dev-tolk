@@ -1,18 +1,15 @@
-//! Команды очереди для интерфейса (MVP-016) и временная отладочная постановка файла (MVP-013).
-//! `debug_enqueue` и `debug_models` удаляются в MVP-018/MVP-019, когда появятся импорт и экран очереди.
+//! Команды очереди и истории для интерфейса (MVP-016, MVP-019).
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
+use tauri::State;
 use tolk_core::executor::{Executor, JobEvent};
+use tolk_core::export::group_paragraphs;
 use tolk_core::import::ImportEvent;
 use tolk_core::jobs::{self, Job};
-use tolk_core::layout::DataLayout;
-use tolk_core::model_manager;
-use tolk_core::models::SystemInfo;
 use tolk_core::queue;
 use tolk_core::store::Store;
 use tolk_core::user_errors;
@@ -42,6 +39,7 @@ pub struct JobDto {
     id: String,
     source_name: String,
     status: String,
+    duration_ms: Option<i64>,
     progress: u8,
     model_id: Option<String>,
     attempts: u32,
@@ -62,6 +60,7 @@ impl From<Job> for JobDto {
             id: j.id,
             source_name: j.source_name,
             status: j.status.as_str().to_string(),
+            duration_ms: j.duration_ms,
             progress: j.progress,
             model_id: j.model_id,
             attempts: j.attempts,
@@ -154,28 +153,71 @@ pub fn job_retry(
     Ok(job.into())
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DebugModel {
+/// Удаление завершённого задания вместе с файлами. Задание в очереди или в обработке сначала отменяют.
+#[tauri::command]
+pub fn job_delete(
+    store: State<'_, Arc<Store>>,
+    executor: State<'_, Arc<Executor>>,
     id: String,
-    title: String,
-    installed: bool,
+) -> Result<(), String> {
+    if executor.is_running(&id) {
+        return Err(
+            user_errors::from_store(&tolk_core::StoreError::InvalidTransition {
+                id,
+                from: "PROCESSING",
+                to: "DELETED",
+            })
+            .message,
+        );
+    }
+    store.delete_finished_job(&id).map_err(|e| user_error(&e))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Paragraph {
+    start_ms: u64,
+    text: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptView {
+    title: String,
+    model: String,
+    duration_ms: u64,
+    has_edits: bool,
+    paragraphs: Vec<Paragraph>,
+}
+
+/// Текст готового задания для просмотра: рабочая копия, а при её отсутствии оригинал.
 #[tauri::command]
-pub fn debug_models(
-    app: AppHandle,
-    store: State<'_, Arc<Store>>,
-) -> Result<Vec<DebugModel>, String> {
-    let layout = DataLayout::new(app.path().app_local_data_dir().map_err(|e| e.to_string())?);
-    let list = model_manager::list(&store.db, &layout.models_dir(), &SystemInfo::detect())
-        .map_err(|e| user_error(&e))?;
-    Ok(list
-        .into_iter()
-        .map(|s| DebugModel {
-            id: s.entry.id.clone(),
-            title: s.entry.title.clone(),
-            installed: s.installed,
-        })
-        .collect())
+pub fn job_transcript(store: State<'_, Arc<Store>>, id: String) -> Result<TranscriptView, String> {
+    let job = {
+        let conn = store.db.conn();
+        jobs::get(&conn, &id)
+            .map_err(|e| user_error(&e))?
+            .ok_or_else(|| user_error(&tolk_core::StoreError::JobNotFound(id.clone())))?
+    };
+    let bytes = [("transcript.json"), ("original.json")]
+        .iter()
+        .find_map(|name| store.files.read(&id, name).transpose())
+        .transpose()
+        .map_err(|e| user_error(&e))?
+        .ok_or("Файл с расшифровкой не найден.")?;
+    let transcript =
+        tolk_core::transcript::Transcript::from_json(&bytes).map_err(|e| user_error(&e))?;
+    Ok(TranscriptView {
+        title: job.source_name,
+        model: transcript.model.clone(),
+        duration_ms: transcript.duration_ms,
+        has_edits: job.has_edits,
+        paragraphs: group_paragraphs(&transcript)
+            .into_iter()
+            .map(|b| Paragraph {
+                start_ms: b.start_ms,
+                text: b.text,
+            })
+            .collect(),
+    })
 }

@@ -39,7 +39,7 @@
     retry.click();
     retry.click();
     await sleep(1500);
-    await rep({ step: 'C-double-retry', counts: counts(), message: q('p[role="status"]')?.textContent ?? '' });
+    await rep({ step: 'C-double-retry', counts: counts(), message: alertText() });
     await waitFor(() => itemBy('S1.wav', 'PROCESSING'), 30000, 'retry processing');
     await sleep(5000);
     await rep({ step: 'D-closing', counts: counts() });

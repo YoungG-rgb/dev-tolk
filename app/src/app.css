@@ -3,6 +3,11 @@
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 15px;
   line-height: 1.5;
+  --line: color-mix(in srgb, currentColor 15%, transparent);
+  --accent: #2f6fed;
+  --ok: #1f8a4c;
+  --bad: #c0392b;
+  --warn: #b7791f;
 }
 
 body {
@@ -10,61 +15,186 @@ body {
 }
 
 main {
-  max-width: 44rem;
+  max-width: 52rem;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem;
+  padding: 2rem 1.5rem 3rem;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 h1 {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.15rem;
   font-size: 1.6rem;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+p {
+  margin: 0.25rem 0;
 }
 
 .muted {
   opacity: 0.7;
 }
 
-dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.35rem 1.25rem;
-  margin: 1.5rem 0 0;
+button {
+  font: inherit;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
-dt {
+button:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+button.danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+progress {
+  width: 8rem;
+  vertical-align: middle;
+}
+
+.error {
+  color: var(--bad);
+}
+
+.empty {
+  margin-top: 3rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+}
+
+.jobs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.job .main {
+  display: grid;
+  min-width: 0;
+}
+
+.job .name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job .meta {
+  font-size: 0.85em;
   opacity: 0.7;
 }
 
-dd {
-  margin: 0;
-  word-break: break-all;
+.job .state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.debug {
-  margin-top: 2rem;
-  display: grid;
-  gap: 0.5rem;
-  max-width: 48rem;
-}
-.debug label {
-  display: grid;
-  gap: 0.25rem;
-}
-.debug .row {
+.job .actions {
   display: flex;
-  gap: 0.5rem;
   align-items: center;
+  gap: 0.4rem;
 }
-.debug .jobs {
-  max-height: 24rem;
-  overflow: auto;
-  padding-left: 0;
-  list-style: none;
+
+.job .confirm {
+  font-size: 0.9em;
 }
-.debug .jobs li {
+
+.chip {
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8em;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.chip.completed {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.chip.failed {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.chip.processing {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.importing {
   display: flex;
-  gap: 0.5rem;
   align-items: center;
+  gap: 0.5rem;
   flex-wrap: wrap;
-  padding: 0.25rem 0;
+}
+
+.notes {
+  margin: 0.5rem 0;
+  padding-left: 1.1rem;
+}
+
+.notes .warn {
+  color: var(--warn);
+}
+
+.transcript .bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.transcript .para {
+  margin: 0.8rem 0;
+}
+
+.transcript .time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+  margin-right: 0.5rem;
+}
+
+footer {
+  margin-top: 2.5rem;
+  font-size: 0.8em;
+  word-break: break-all;
 }

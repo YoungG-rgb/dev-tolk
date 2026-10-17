@@ -5,15 +5,7 @@
   try {
     await setup('@MODEL@');
     const notes = () => [...document.querySelectorAll('.notes li')].map((li) => ({ cls: li.className, text: li.textContent.replace(/\s+/g, ' ').trim() }));
-    const importOne = async (path, expectJobs) => {
-      setValue(q('input[type="text"]'), path, 'input');
-      await sleep(60);
-      button('Начать').click();
-      // Импорт идёт в фоне: ждём, пока он закончится (панель «Импорт N из M» исчезла) и список обновился.
-      await waitFor(() => document.querySelector('.importing') || items().length >= expectJobs || document.querySelector('.notes li'), 15000, 'import started');
-      await waitFor(() => !document.querySelector('.importing'), 120000, 'import finished');
-      await sleep(300);
-    };
+    const importOne = (path) => enqueue(path);
     await importOne('@MP3@', 1);
     await rep({ step: 'I-audio', jobs: items().length, notes: notes() });
     await importOne('@VIDEO@', 2);

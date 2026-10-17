@@ -97,7 +97,8 @@ pub async fn import_pick(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Импорт по путям, введённым вручную (временная отладка и автопроверка).
+/// Импорт по путям (только автопроверка в окне, feature `ui-test`).
+#[cfg(feature = "ui-test")]
 #[tauri::command]
 pub fn import_paths(app: AppHandle, paths: Vec<String>) {
     start_import(&app, paths.into_iter().map(PathBuf::from).collect());

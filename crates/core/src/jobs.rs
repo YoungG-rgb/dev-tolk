@@ -181,3 +181,24 @@ pub fn all_ids(conn: &Connection) -> Result<Vec<String>> {
 pub fn delete(conn: &Connection, id: &str) -> Result<bool> {
     Ok(conn.execute("DELETE FROM jobs WHERE id = ?1", [id])? > 0)
 }
+
+/// Удаляет запись только у завершённого задания (COMPLETED, FAILED, CANCELLED): условный `DELETE`, поэтому
+/// гонка с повтором или захватом исполнителем решается в базе. `false` — задания нет.
+/// Ошибка `InvalidTransition`, если задание в очереди или в обработке.
+pub fn delete_finished(conn: &Connection, id: &str) -> Result<bool> {
+    let deleted = conn.execute(
+        "DELETE FROM jobs WHERE id = ?1 AND status IN ('COMPLETED', 'FAILED', 'CANCELLED')",
+        [id],
+    )?;
+    if deleted > 0 {
+        return Ok(true);
+    }
+    match get(conn, id)? {
+        None => Ok(false),
+        Some(job) => Err(StoreError::InvalidTransition {
+            id: id.to_string(),
+            from: job.status.as_str(),
+            to: "DELETED",
+        }),
+    }
+}
