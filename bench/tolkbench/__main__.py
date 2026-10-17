@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import corpus, metrics, repeats, terms, whisper_run
+from . import corpus, metrics, prepare, repeats, terms, whisper_run
 
 
 def cmd_score(args: argparse.Namespace) -> None:
@@ -54,6 +54,25 @@ def cmd_check_corpus(args: argparse.Namespace) -> None:
     sys.exit(0 if report.success else 1)
 
 
+def cmd_prepare_fragment(args: argparse.Namespace) -> None:
+    result = prepare.prepare_fragment(Path(args.dir), args.id, prepare.parse_time(args.start), args.reviewer, args.force, args.threads)
+    print(f"Фрагмент: {result['wav']} ({result['seconds']:.0f} с из записи {result['recording_seconds'] / 60:.1f} мин)")
+    print(f"Черновик (large-v3-q5_0): {result['draft']}")
+    if result["ref_created_from_draft"]:
+        print(f"Заготовка эталона: {result['ref']} — скопирована из черновика. ВАША РАБОТА: прослушать фрагмент и исправить каждое слово.")
+    else:
+        print(f"Эталон {result['ref']} уже есть и не изменён.")
+    print(f"Метаданные: {result['meta']} (review2_done=false: после второго прослушивания поставьте true)")
+
+
+def cmd_manifest(args: argparse.Namespace) -> None:
+    rows = prepare.write_manifest(Path(args.dir), args.consent_date or "")
+    missing = [r["id"] for r in rows if r["kind"] == "recording" and not r["consent_date"]]
+    print(f"manifest.csv: {len(rows)} файлов, SHA-256 и длительность обновлены.")
+    if missing:
+        print(f"Не указана дата согласия: {', '.join(missing)} (колонка consent_date или --consent-date ГГГГ-ММ-ДД).")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="tolkbench")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -83,6 +102,20 @@ def main() -> None:
     p.add_argument("dir")
     p.add_argument("--minimal", action="store_true", help="только минимальный набор для первого бенчмарка")
     p.set_defaults(fn=cmd_check_corpus)
+
+    p = sub.add_parser("prepare-fragment", help="нарезать 5-минутный фрагмент и сделать черновик эталона (large-v3-q5_0)")
+    p.add_argument("dir")
+    p.add_argument("id", choices=list(corpus.FRAGMENT_SOURCES))
+    p.add_argument("--start", required=True, help="начало фрагмента: секунды, мм:сс или чч:мм:сс")
+    p.add_argument("--reviewer", default="")
+    p.add_argument("--threads", type=int, default=4)
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(fn=cmd_prepare_fragment)
+
+    p = sub.add_parser("manifest", help="заполнить manifest.csv по файлам корпуса (SHA-256, длительность, кодек)")
+    p.add_argument("dir")
+    p.add_argument("--consent-date", help="дата согласия участников (указывает человек), если у всех записей одна")
+    p.set_defaults(fn=cmd_manifest)
 
     args = ap.parse_args()
     args.fn(args)
