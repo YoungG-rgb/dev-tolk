@@ -1,0 +1,15 @@
+[package]
+name = "tolk-core"
+description = "Ядро dev-tolk без UI: каталог данных, SQLite, очередь заданий"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }
+thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

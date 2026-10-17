@@ -1,15 +1,13 @@
 //! Оболочка приложения dev-tolk (Tauri 2). На этапе MVP-012 — только каркас:
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::Serialize;
 use tauri::{Manager, Runtime};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
-
-/// Подкаталоги каталога данных (TECHNICAL_DECISIONS §2).
-const DATA_SUBDIRS: &[&str] = &["models", "jobs", "tmp", "logs"];
+use tolk_core::db::Db;
+use tolk_core::layout::DataLayout;
 
 /// Размер файла журнала, после которого он ротируется, в байтах.
 const LOG_MAX_FILE_BYTES: u128 = 2 * 1024 * 1024;
@@ -31,14 +29,6 @@ fn data_dir<R: Runtime, M: Manager<R>>(manager: &M) -> Result<PathBuf, String> {
         .path()
         .app_local_data_dir()
         .map_err(|e| e.to_string())
-}
-
-/// Создаёт каталог данных и подкаталоги.
-fn ensure_data_dirs(root: &Path) -> std::io::Result<()> {
-    for sub in DATA_SUBDIRS {
-        fs::create_dir_all(root.join(sub))?;
-    }
-    Ok(())
 }
 
 #[tauri::command]
@@ -76,7 +66,8 @@ pub fn run() {
         }))
         .setup(|app| {
             let data = data_dir(app.handle())?;
-            ensure_data_dirs(&data)?;
+            let layout = DataLayout::new(&data);
+            layout.ensure()?;
 
             let mut log = tauri_plugin_log::Builder::new()
                 .clear_targets()
@@ -91,6 +82,10 @@ pub fn run() {
                 log = log.target(Target::new(TargetKind::Stderr));
             }
             app.handle().plugin(log.build())?;
+
+            let db = Db::open(&layout.db_path())?;
+            log::info!("База данных открыта, версия схемы {}", db.schema_version()?);
+            app.manage(db);
 
             log::info!(
                 "dev-tolk {} запущен ({} {}), данные: {}",

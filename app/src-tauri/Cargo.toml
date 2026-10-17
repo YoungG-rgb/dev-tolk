@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Ветка 2.x; Tauri 3 (alpha) не используется (TD-01).
 tauri = { version = "~2.12", features = [] }
+tolk-core = { path = "../../crates/core" }
 tauri-plugin-single-instance = "2"
 tauri-plugin-log = "2"
 log = "0.4"
