@@ -7,7 +7,7 @@ node_modules/
 dist/
 
 # Tauri
-/src-tauri/gen/
+/app/src-tauri/gen/
 
 # IDE
 .idea/

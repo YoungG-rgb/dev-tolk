@@ -5,8 +5,8 @@ on:
   pull_request:
 
 jobs:
-  rust:
-    name: Rust (${{ matrix.os }})
+  engine:
+    name: Движок (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -19,6 +19,46 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo build --workspace --release
-      - run: cargo test --workspace
+      - run: cargo clippy -p tolk-engine --all-targets -- -D warnings
+      - run: cargo build -p tolk-engine --release
+      - run: cargo test -p tolk-engine
+
+  app:
+    name: Приложение (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: nsis
+          - os: macos-15
+            bundles: app
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Зависимости и проверка фронтенда
+        working-directory: app
+        run: |
+          npm ci
+          npm run check
+          npm run build
+      - run: cargo clippy -p tolk-app --all-targets -- -D warnings
+      - name: Сборка неподписанного приложения
+        working-directory: app
+        run: npx tauri build --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tolk-app-${{ matrix.os }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/macos/*.app
+          if-no-files-found: error
