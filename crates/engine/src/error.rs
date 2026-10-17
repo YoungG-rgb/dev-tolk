@@ -24,6 +24,12 @@ pub enum ErrorCode {
     CorruptFile,
     /// Не удалось записать результат (нет места, нет доступа к каталогу).
     OutputFailed,
+    /// Файл модели не найден или пуст.
+    ModelMissing,
+    /// Модель не удалось загрузить: файл повреждён, не подходит или не хватает памяти.
+    ModelInvalid,
+    /// Обработка отменена сигналом завершения.
+    Cancelled,
     /// Внутренняя ошибка движка (включая panic).
     Internal,
 }
@@ -34,6 +40,8 @@ impl ErrorCode {
             ErrorCode::Internal => 1,
             ErrorCode::Usage => 2,
             ErrorCode::OutputFailed => 11,
+            ErrorCode::ModelMissing | ErrorCode::ModelInvalid => 12,
+            ErrorCode::Cancelled => 130,
             ErrorCode::FileNotFound
             | ErrorCode::AccessDenied
             | ErrorCode::UnsupportedFormat

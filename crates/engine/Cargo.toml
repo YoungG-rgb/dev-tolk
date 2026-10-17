@@ -17,3 +17,15 @@ rubato = "5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
+libc = "0.2"
+
+# Привязка к whisper.cpp (TD-05): whisper-rs вендорит whisper.cpp 1.8.3. Metal — только на macOS.
+[target.'cfg(target_os = "macos")'.dependencies]
+whisper-rs = { version = "0.16", features = ["metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+whisper-rs = "0.16"
+
+[dev-dependencies]
+# Формат original.json проверяется структурой ядра: движок и приложение должны понимать друг друга.
+tolk-core = { path = "../core" }

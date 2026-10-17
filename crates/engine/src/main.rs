@@ -1,10 +1,13 @@
 //! tolk-engine: отдельный процесс-движок dev-tolk (TD-04).
 //!
-//! Команды этого этапа (MVP-008): `probe` и `extract`. Протокол — JSON Lines в stdout,
+//! Команды: `probe`, `extract` (MVP-008) и `transcribe` (MVP-009, предварительно). Протокол — JSON Lines в stdout,
 //! описан в `docs/ENGINE_PROTOCOL.md`.
 
+mod atomic;
 mod decode;
 mod error;
+mod memory;
+mod transcribe;
 mod wav;
 
 use std::ffi::OsString;
@@ -23,6 +26,8 @@ tolk-engine — движок транскрибации dev-tolk
 Использование:
   tolk-engine probe <файл>               сведения о файле (JSON)
   tolk-engine extract <файл> <out.wav>   аудио -> WAV 16 кГц моно 16 бит
+  tolk-engine transcribe --model <модель> --input <файл> --output <original.json>
+                         [--vad-model <модель>] [--language ru] [--threads N] [--no-gpu]
   tolk-engine --version
 ";
 
@@ -47,6 +52,24 @@ enum Event<'a> {
         incomplete: bool,
         skipped_packets: u64,
     },
+    Segment {
+        start_ms: u64,
+        end_ms: u64,
+        text: &'a str,
+    },
+    #[serde(rename = "done")]
+    TranscribeDone {
+        output: &'a str,
+        segments: usize,
+        audio_ms: u64,
+        elapsed_ms: u64,
+        model_load_ms: u64,
+        decode_ms: u64,
+        recognize_ms: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        peak_rss_bytes: Option<u64>,
+        backend: &'a str,
+    },
     Error {
         code: ErrorCode,
         message: &'a str,
@@ -61,6 +84,86 @@ fn emit(event: &Event<'_>) {
     let _ = serde_json::to_writer(&mut out, event);
     let _ = out.write_all(b"\n");
     let _ = out.flush();
+}
+
+/// Печать события прогресса из любого места (в том числе из обратного вызова whisper.cpp).
+pub(crate) fn print_progress(percent: u32) {
+    emit(&Event::Progress { percent });
+}
+
+/// Печать готового сегмента.
+pub(crate) fn print_segment(start_ms: u64, end_ms: u64, text: &str) {
+    emit(&Event::Segment {
+        start_ms,
+        end_ms,
+        text,
+    });
+}
+
+fn parse_transcribe_args(args: &[OsString]) -> Result<transcribe::Args> {
+    let usage = |msg: String| EngineError::new(ErrorCode::Usage, format!("{msg}\n{USAGE}"));
+    let (mut model, mut vad, mut input, mut output) = (None, None, None, None);
+    let mut language = "ru".to_string();
+    let mut threads = None;
+    let mut no_gpu = false;
+    let mut it = args.iter();
+    while let Some(flag) = it.next() {
+        let name = flag.to_str().unwrap_or("");
+        let mut value = |what: &str| {
+            it.next()
+                .cloned()
+                .ok_or_else(|| usage(format!("{what}: не указано значение")))
+        };
+        match name {
+            "--model" => model = Some(PathBuf::from(value("--model")?)),
+            "--vad-model" => vad = Some(PathBuf::from(value("--vad-model")?)),
+            "--input" => input = Some(PathBuf::from(value("--input")?)),
+            "--output" => output = Some(PathBuf::from(value("--output")?)),
+            "--language" => language = value("--language")?.to_string_lossy().into_owned(),
+            "--threads" => {
+                let raw = value("--threads")?;
+                threads = Some(
+                    raw.to_string_lossy()
+                        .parse::<usize>()
+                        .map_err(|_| usage("--threads: нужно целое число".into()))?,
+                );
+            }
+            "--no-gpu" => no_gpu = true,
+            other => return Err(usage(format!("transcribe: неизвестный аргумент {other}"))),
+        }
+    }
+    Ok(transcribe::Args {
+        model: model.ok_or_else(|| usage("transcribe: нужен --model".into()))?,
+        vad_model: vad,
+        input: input.ok_or_else(|| usage("transcribe: нужен --input".into()))?,
+        output: output.ok_or_else(|| usage("transcribe: нужен --output".into()))?,
+        language,
+        threads,
+        no_gpu,
+    })
+}
+
+fn cmd_transcribe(args: &[OsString]) -> Result<()> {
+    let args = parse_transcribe_args(args)?;
+    if same_file(&args.input, &args.output) {
+        return Err(EngineError::new(
+            ErrorCode::Usage,
+            "Выходной файл совпадает с входным: исходный файл не изменяется",
+        ));
+    }
+    let outcome = transcribe::run(&args)?;
+    emit(&Event::TranscribeDone {
+        output: &args.output.to_string_lossy(),
+        segments: outcome.segments,
+        audio_ms: outcome.audio_ms,
+        elapsed_ms: outcome.timings.elapsed_ms,
+        model_load_ms: outcome.timings.model_load_ms,
+        decode_ms: outcome.timings.decode_ms,
+        recognize_ms: outcome.timings.recognize_ms,
+        peak_rss_bytes: outcome.peak_rss_bytes,
+        backend: outcome.backend,
+    });
+    Ok(())
 }
 
 fn cmd_probe(path: &Path) -> Result<()> {
@@ -129,7 +232,11 @@ fn run(args: Vec<OsString>) -> Result<()> {
     let Some(cmd) = it.next() else {
         return Err(usage("Не указана команда"));
     };
-    let rest: Vec<PathBuf> = it.map(PathBuf::from).collect();
+    let raw: Vec<OsString> = it.collect();
+    if cmd.to_str() == Some("transcribe") {
+        return cmd_transcribe(&raw);
+    }
+    let rest: Vec<PathBuf> = raw.into_iter().map(PathBuf::from).collect();
     match (cmd.to_str(), rest.as_slice()) {
         (Some("probe"), [file]) => cmd_probe(file),
         (Some("extract"), [input, output]) => cmd_extract(input, output),
