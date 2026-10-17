@@ -42,31 +42,39 @@
     return () => document.removeEventListener('securitypolicyviolation', onViolation);
   });
 
-  // --- Временная отладочная панель (MVP-013), удаляется в MVP-019 ---
+  // --- Временная отладочная панель (MVP-013/016), заменяется экраном очереди в MVP-018/019 ---
   type DebugModel = { id: string; title: string; installed: boolean };
-  type UiEvent =
-    | { kind: 'progress'; percent: number }
-    | { kind: 'segment'; startMs: number; endMs: number; text: string }
-    | {
-        kind: 'done';
-        segments: number;
-        audioMs: number;
-        elapsedMs: number;
-        modelLoadMs: number;
-        recognizeMs: number;
-        peakRssMb: number | null;
-        backend: string;
-      }
-    | { kind: 'failed'; code: string; message: string; action: string }
-    | { kind: 'cancelled' };
+  type Job = {
+    id: string;
+    sourceName: string;
+    status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+    progress: number;
+    attempts: number;
+    errorCode: string | null;
+    errorMessage: string | null;
+    errorAction: string | null;
+  };
+  type JobEvent =
+    | { kind: 'started'; jobId: string }
+    | { kind: 'progress'; jobId: string; percent: number }
+    | { kind: 'finished'; jobId: string; status: Job['status']; errorCode: string | null; errorMessage: string | null };
+
+  const STATUS: Record<Job['status'], string> = {
+    QUEUED: 'в очереди',
+    PROCESSING: 'обрабатывается',
+    COMPLETED: 'готово',
+    FAILED: 'ошибка',
+    CANCELLED: 'отменено',
+  };
 
   let models = $state<DebugModel[]>([]);
   let modelId = $state('');
   let filePath = $state('');
-  let running = $state(false);
-  let percent = $state(0);
-  let segments = $state<{ startMs: number; text: string }[]>([]);
-  let outcome = $state<string | null>(null);
+  let jobs = $state<Job[]>([]);
+  let message = $state<string | null>(null);
+
+  const refresh = () =>
+    invoke<Job[]>('jobs_list').then((list) => (jobs = list));
 
   $effect(() => {
     invoke<DebugModel[]>('debug_models')
@@ -75,53 +83,36 @@
         modelId = list.find((m) => m.installed)?.id ?? '';
       })
       .catch(() => (models = []));
+
+    const channel = new Channel<JobEvent>();
+    channel.onmessage = (e) => {
+      const job = jobs.find((j) => j.id === e.jobId);
+      if (e.kind === 'progress' && job) job.progress = e.percent;
+      // Начало и конец меняют статус и ошибку: берём актуальное состояние из базы.
+      else if (e.kind !== 'progress') void refresh();
+    };
+    void invoke('jobs_subscribe', { onEvent: channel }).then(refresh);
   });
 
-  const fmt = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  };
-
-  async function start() {
-    running = true;
-    percent = 0;
-    segments = [];
-    outcome = null;
-    const channel = new Channel<UiEvent>();
-    channel.onmessage = (e) => {
-      switch (e.kind) {
-        case 'progress':
-          percent = e.percent;
-          break;
-        case 'segment':
-          segments.push({ startMs: e.startMs, text: e.text });
-          break;
-        case 'done': {
-          const rtf = e.audioMs > 0 ? (e.elapsedMs / e.audioMs).toFixed(3) : '—';
-          outcome =
-            `Готово: сегментов ${e.segments}, запись ${fmt(e.audioMs)}, обработка ${(e.elapsedMs / 1000).toFixed(1)} с ` +
-            `(загрузка модели ${(e.modelLoadMs / 1000).toFixed(1)} с, распознавание ${(e.recognizeMs / 1000).toFixed(1)} с), ` +
-            `RTF ${rtf}, пик памяти ${e.peakRssMb ?? '—'} МБ, бэкенд ${e.backend}`;
-          break;
-        }
-        case 'failed':
-          outcome = `${e.message} ${e.action} (${e.code})`;
-          break;
-        case 'cancelled':
-          outcome = 'Обработка отменена.';
-          break;
-      }
-    };
+  async function enqueue() {
+    message = null;
     try {
-      await invoke('debug_transcribe', { file: filePath, modelId, onEvent: channel });
+      await invoke('debug_enqueue', { file: filePath, modelId });
+      await refresh();
     } catch (e) {
-      outcome = String(e);
-    } finally {
-      running = false;
+      message = String(e);
     }
   }
 
-  const cancel = () => void invoke('debug_cancel');
+  async function act(command: 'job_cancel' | 'job_retry', id: string) {
+    message = null;
+    try {
+      await invoke(command, { id });
+    } catch (e) {
+      message = String(e);
+    }
+    await refresh();
+  }
 </script>
 
 <main>
@@ -151,27 +142,36 @@
   {/if}
 
   <section class="debug">
-    <h2>Отладка: транскрибировать файл</h2>
-    <p class="muted">Временная панель (MVP-013), будет заменена экраном очереди.</p>
-    <label>Путь к файлу <input type="text" bind:value={filePath} disabled={running} /></label>
+    <h2>Отладка: очередь</h2>
+    <p class="muted">Временная панель (MVP-013/016), будет заменена экраном очереди.</p>
+    <label>Путь к файлу <input type="text" bind:value={filePath} /></label>
     <label>
       Модель
-      <select bind:value={modelId} disabled={running}>
+      <select bind:value={modelId}>
         {#each models as m (m.id)}
           <option value={m.id} disabled={!m.installed}>{m.title}{m.installed ? '' : ' (не установлена)'}</option>
         {/each}
       </select>
     </label>
     <div class="row">
-      <button onclick={start} disabled={running || !filePath || !modelId}>Начать</button>
-      <button onclick={cancel} disabled={!running}>Отменить</button>
-      {#if running}<progress max="100" value={percent}></progress> {percent}%{/if}
+      <button onclick={enqueue} disabled={!filePath || !modelId}>Начать</button>
     </div>
-    {#if outcome}<p role="status">{outcome}</p>{/if}
-    <ol class="segments">
-      {#each segments as seg}
-        <li><span class="muted">{fmt(seg.startMs)}</span> {seg.text}</li>
+    {#if message}<p role="status">{message}</p>{/if}
+    <ul class="jobs">
+      {#each jobs as job (job.id)}
+        <li data-status={job.status}>
+          <span>{job.sourceName}</span>
+          <span class="muted">{STATUS[job.status]}</span>
+          {#if job.status === 'PROCESSING'}<progress max="100" value={job.progress}></progress> {job.progress}%{/if}
+          {#if job.errorMessage}<span class="error">{job.errorMessage} {job.errorAction ?? ''}</span>{/if}
+          {#if job.status === 'QUEUED' || job.status === 'PROCESSING'}
+            <button onclick={() => act('job_cancel', job.id)}>Отменить</button>
+          {/if}
+          {#if job.status === 'FAILED' || job.status === 'CANCELLED'}
+            <button onclick={() => act('job_retry', job.id)}>Повторить</button>
+          {/if}
+        </li>
       {/each}
-    </ol>
+    </ul>
   </section>
 </main>

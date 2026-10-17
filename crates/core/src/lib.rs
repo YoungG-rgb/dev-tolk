@@ -7,6 +7,7 @@ pub mod disk;
 pub mod download;
 pub mod engine;
 pub mod error;
+pub mod executor;
 pub mod export;
 pub mod files;
 pub mod glossary;

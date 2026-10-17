@@ -18,43 +18,44 @@ function setValue(el, value, evt) {
   el.value = value;
   el.dispatchEvent(new Event(evt, { bubbles: true }));
 }
+const percentNow = () => Number(q('progress')?.value ?? -1);
 let maxGap = 0;
+let maxGapInfo = null;
 let last = performance.now();
 setInterval(() => {
   const n = performance.now();
-  maxGap = Math.max(maxGap, n - last - 100);
+  if (n - last - 100 > maxGap) {
+    maxGap = n - last - 100;
+    maxGapInfo = { at: Date.now(), visible: document.visibilityState, focused: document.hasFocus(), progress: percentNow() };
+  }
   last = n;
 }, 100);
 const takeLag = () => {
-  const g = Math.round(maxGap);
+  const g = { ms: Math.round(maxGap), ...maxGapInfo };
   maxGap = 0;
+  maxGapInfo = null;
   return g;
 };
-const outcomeText = () => q('p[role="status"]')?.textContent ?? '';
-const segmentCount = () => document.querySelectorAll('.segments li').length;
-const percentNow = () => Number(q('progress')?.value ?? -1);
-async function setup(modelId, file) {
+const items = () => [...document.querySelectorAll('.jobs li')];
+const itemsWith = (status) => items().filter((li) => li.dataset.status === status);
+const itemBy = (name, status) => items().find((li) => li.textContent.includes(name) && (!status || li.dataset.status === status));
+const itemButton = (li, text) => [...li.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
+const counts = () => {
+  const c = {};
+  for (const li of items()) c[li.dataset.status] = (c[li.dataset.status] ?? 0) + 1;
+  return c;
+};
+async function setup(modelId) {
   await waitFor(() => [...document.querySelectorAll('select option')].some((o) => !o.disabled), 10000, 'models');
   setValue(q('select'), modelId, 'change');
+  await sleep(100);
+}
+// Вводит путь и нажимает «Начать» — ставит файл в очередь.
+async function enqueue(file) {
   setValue(q('input[type="text"]'), file, 'input');
-  await sleep(200);
-}
-async function start() {
+  await sleep(60);
   const b = button('Начать');
-  await waitFor(() => !b.disabled, 5000, 'start enabled');
+  await waitFor(() => !b.disabled, 5000, 'enqueue enabled');
   b.click();
-  await rep({ step: 'start-clicked' });
-}
-// Запускает файл и ждёт одно из «Готово»/«отменена»/ошибка. Возвращает итоговый текст.
-async function runToEnd(timeoutMs) {
-  await start();
-  const percents = new Set();
-  const t0 = Date.now();
-  while (Date.now() - t0 < timeoutMs) {
-    const p = percentNow();
-    if (p >= 0) percents.add(p);
-    if (outcomeText()) break;
-    await sleep(100);
-  }
-  return { outcome: outcomeText(), percents: [...percents], segments: segmentCount() };
+  await sleep(150);
 }

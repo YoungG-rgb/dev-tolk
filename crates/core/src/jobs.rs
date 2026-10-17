@@ -130,6 +130,22 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<Job>> {
         .transpose()
 }
 
+/// Все задания, новые сверху.
+pub fn list(conn: &Connection) -> Result<Vec<Job>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COLUMNS} FROM jobs ORDER BY created_at DESC, rowid DESC"
+    ))?;
+    let rows = stmt
+        .query_map([], from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(mut job, status)| {
+            job.status = status.parse()?;
+            Ok(job)
+        })
+        .collect()
+}
+
 /// Идентификаторы всех заданий (для поиска «осиротевших» каталогов).
 pub fn all_ids(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT id FROM jobs")?;

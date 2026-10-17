@@ -1,20 +1,25 @@
 //! Оболочка приложения dev-tolk (Tauri 2). На этапе MVP-012 — только каркас:
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
-mod debug_transcribe;
+mod queue_commands;
 #[cfg(feature = "ui-test")]
 mod ui_test;
 
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{Manager, Runtime};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+use tolk_core::executor::Executor;
 use tolk_core::layout::DataLayout;
 use tolk_core::store::Store;
 
 /// Размер файла журнала, после которого он ротируется, в байтах.
 const LOG_MAX_FILE_BYTES: u128 = 2 * 1024 * 1024;
+/// Сколько ждать записи итога идущего задания при закрытии окна.
+const SHUTDOWN_WAIT: Duration = Duration::from_secs(3);
 /// Сколько файлов журнала хранится.
 const LOG_KEEP_FILES: usize = 5;
 
@@ -29,6 +34,11 @@ struct AppInfo {
 }
 
 fn data_dir<R: Runtime, M: Manager<R>>(manager: &M) -> Result<PathBuf, String> {
+    // Автопроверка (feature ui-test) работает в отдельном каталоге данных, не трогая данные пользователя.
+    #[cfg(feature = "ui-test")]
+    if let Some(dir) = std::env::var_os("TOLK_UI_TEST_DATA") {
+        return Ok(PathBuf::from(dir));
+    }
     manager
         .path()
         .app_local_data_dir()
@@ -64,9 +74,12 @@ macro_rules! handlers {
         tauri::generate_handler![
             app_info,
             report_csp_check,
-            debug_transcribe::debug_models,
-            debug_transcribe::debug_transcribe,
-            debug_transcribe::debug_cancel
+            queue_commands::jobs_list,
+            queue_commands::jobs_subscribe,
+            queue_commands::job_cancel,
+            queue_commands::job_retry,
+            queue_commands::debug_models,
+            queue_commands::debug_enqueue
         ]
     };
 }
@@ -77,9 +90,12 @@ macro_rules! handlers {
         tauri::generate_handler![
             app_info,
             report_csp_check,
-            debug_transcribe::debug_models,
-            debug_transcribe::debug_transcribe,
-            debug_transcribe::debug_cancel,
+            queue_commands::jobs_list,
+            queue_commands::jobs_subscribe,
+            queue_commands::job_cancel,
+            queue_commands::job_retry,
+            queue_commands::debug_models,
+            queue_commands::debug_enqueue,
             ui_test::ui_test_report,
             ui_test::ui_test_close
         ]
@@ -124,10 +140,25 @@ pub fn run() {
                 cleanup.tmp_removed,
                 cleanup.orphans_removed.len()
             );
+            let store = Arc::new(store);
+            // Запрет сна на время обработки: исполнитель очереди вызывает `sync_with_queue` после переходов.
+            let inhibitor = Arc::new(Mutex::new(tolk_core::power::SleepInhibitor::new()));
+            let subscribers = Arc::new(queue_commands::Subscribers::default());
+            let engine = queue_commands::engine_exe().unwrap_or_else(|| {
+                log::error!("Не найден движок распознавания (tolk-engine)");
+                PathBuf::from("tolk-engine")
+            });
+            let sink_subscribers = Arc::clone(&subscribers);
+            let executor = Executor::new(
+                Arc::clone(&store),
+                engine,
+                inhibitor,
+                Arc::new(move |event| sink_subscribers.publish(event)),
+            );
+            executor.spawn();
             app.manage(store);
-            app.manage(debug_transcribe::ActiveRun::default());
-            // Запрет сна на время обработки: исполнитель очереди (MVP-016) вызывает `sync_with_queue` после переходов.
-            app.manage(std::sync::Mutex::new(tolk_core::power::SleepInhibitor::new()));
+            app.manage(subscribers);
+            app.manage(executor);
 
             log::info!(
                 "dev-tolk {} запущен ({} {}), данные: {}",
@@ -141,10 +172,15 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Закрытие окна отменяет идущую обработку: дочерний процесс не остаётся (при аварийном
-            // завершении приложения движок завершается сам, см. `--exit-on-stdin-close`).
+            // Закрытие окна прерывает идущую обработку (задание получает статус «Обработка прервана»,
+            // как при сбое); при аварийном завершении приложения движок завершается сам
+            // (`--exit-on-stdin-close`).
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                window.state::<debug_transcribe::ActiveRun>().cancel();
+                let executor = window.state::<Arc<Executor>>();
+                executor.shutdown();
+                if !executor.wait_idle(SHUTDOWN_WAIT) {
+                    log::warn!("Закрытие: задание не успело записать итог за {SHUTDOWN_WAIT:?}");
+                }
             }
         })
         .invoke_handler(handlers!())

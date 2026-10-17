@@ -55,8 +55,16 @@ dd {
   gap: 0.5rem;
   align-items: center;
 }
-.debug .segments {
-  max-height: 20rem;
+.debug .jobs {
+  max-height: 24rem;
   overflow: auto;
-  padding-left: 1.2rem;
+  padding-left: 0;
+  list-style: none;
+}
+.debug .jobs li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.25rem 0;
 }
