@@ -1,0 +1,38 @@
+# Проверка лицензий и источников зависимостей Rust (MVP-029): `cargo deny check licenses bans sources`.
+# Запрещены GPL/AGPL и неизвестные лицензии; список разрешённых лицензий явный.
+
+[graph]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",     # symphonia: файловое копилефт, исходники не изменяются (TD-07)
+    "Unlicense",
+    "CC0-1.0",
+]
+confidence-threshold = 0.8
+unused-allowed-license = "allow"
+
+# Собственные крейты (publish = false): лицензия продукта не выбрана, проверять её нечего.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

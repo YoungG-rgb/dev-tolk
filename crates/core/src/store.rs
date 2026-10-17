@@ -7,12 +7,15 @@ use crate::error::Result;
 use crate::files::JobFiles;
 use crate::jobs;
 use crate::layout::DataLayout;
+use crate::queue;
 
 /// Итоги очистки при старте.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct StartupCleanup {
     /// Удалено временных файлов из `tmp/`.
     pub tmp_removed: usize,
+    /// Задания, оставшиеся в PROCESSING после сбоя, помечены FAILED («Обработка прервана»).
+    pub interrupted: usize,
     /// Каталоги заданий без записи в базе (остатки прерванного удаления или импорта).
     pub orphans_removed: Vec<String>,
 }
@@ -36,8 +39,10 @@ impl Store {
     }
 
     fn cleanup(&self) -> Result<StartupCleanup> {
+        let interrupted = queue::recover_interrupted(&self.db.conn())?;
         let known: HashSet<String> = jobs::all_ids(&self.db.conn())?.into_iter().collect();
         Ok(StartupCleanup {
+            interrupted,
             tmp_removed: self.files.cleanup_tmp()?,
             orphans_removed: self.files.cleanup_orphans(&known)?,
         })

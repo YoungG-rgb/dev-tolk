@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import metrics, repeats, terms, whisper_run
+from . import corpus, metrics, repeats, terms, whisper_run
 
 
 def cmd_score(args: argparse.Namespace) -> None:
@@ -48,6 +48,12 @@ def cmd_hashes(args: argparse.Namespace) -> None:
             print(f"{h.hexdigest()}  {path.name}")
 
 
+def cmd_check_corpus(args: argparse.Namespace) -> None:
+    report = corpus.check_corpus(Path(args.dir), minimal=args.minimal)
+    corpus.print_report(report)
+    sys.exit(0 if report.success else 1)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="tolkbench")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -72,6 +78,11 @@ def main() -> None:
     p = sub.add_parser("hashes", help="SHA-256 файлов каталога корпуса (MVP-002)")
     p.add_argument("dir")
     p.set_defaults(fn=cmd_hashes)
+
+    p = sub.add_parser("check-corpus", help="проверка корпуса по docs/CORPUS_REQUIREMENTS.md")
+    p.add_argument("dir")
+    p.add_argument("--minimal", action="store_true", help="только минимальный набор для первого бенчмарка")
+    p.set_defaults(fn=cmd_check_corpus)
 
     args = ap.parse_args()
     args.fn(args)

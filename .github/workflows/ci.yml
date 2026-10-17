@@ -62,3 +62,11 @@ jobs:
             target/release/bundle/nsis/*.exe
             target/release/bundle/macos/*.app
           if-no-files-found: error
+
+  licenses:
+    name: Лицензии зависимостей
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@cargo-deny
+      - run: cargo deny check licenses bans sources

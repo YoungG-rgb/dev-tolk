@@ -1,0 +1,6 @@
+id,file,kind,duration_s,container_codec,source_device,speakers,environment,consent_date,sha256,notes
+A1,recordings/A1.m4a,recording,,,,,,,,
+A4,recordings/A4.mp3,recording,,,,,,,,
+A5,recordings/A5.m4a,recording,,,,,,,,
+A1f,fragments/A1f.wav,fragment,300,wav 16k mono,,,,,,start_ms в A1f.json
+A5f,fragments/A5f.wav,fragment,300,wav 16k mono,,,,,,

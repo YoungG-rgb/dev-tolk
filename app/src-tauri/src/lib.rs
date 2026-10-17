@@ -85,8 +85,9 @@ pub fn run() {
 
             let (store, cleanup) = Store::open(layout)?;
             log::info!(
-                "Хранилище открыто, версия схемы {}; очистка при старте: временных файлов {}, каталогов без записи {}",
+                "Хранилище открыто, версия схемы {}; очистка при старте: прерванных заданий {}, временных файлов {}, каталогов без записи {}",
                 store.db.schema_version()?,
+                cleanup.interrupted,
                 cleanup.tmp_removed,
                 cleanup.orphans_removed.len()
             );

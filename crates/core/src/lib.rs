@@ -7,6 +7,7 @@ pub mod export;
 pub mod files;
 pub mod jobs;
 pub mod layout;
+pub mod queue;
 pub mod store;
 pub mod transcript;
 

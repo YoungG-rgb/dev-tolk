@@ -23,6 +23,15 @@ pub enum StoreError {
     Export(String),
     #[error("недопустимый идентификатор задания: {0}")]
     InvalidId(String),
+    #[error("задание {0} не найдено")]
+    JobNotFound(String),
+    /// Переход запрещён машиной состояний (например, повторный запуск уже идущего задания).
+    #[error("недопустимый переход задания {id}: {from} -> {to}")]
+    InvalidTransition {
+        id: String,
+        from: &'static str,
+        to: &'static str,
+    },
     #[error("неизвестный статус задания: {0}")]
     UnknownStatus(String),
 }

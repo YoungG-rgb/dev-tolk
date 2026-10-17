@@ -77,10 +77,10 @@ pub fn now_ms() -> i64 {
         .map_or(0, |d| d.as_millis() as i64)
 }
 
-const COLUMNS: &str = "id, source_name, audio_path, duration_ms, status, progress, model_id, error_code, \
+pub(crate) const COLUMNS: &str = "id, source_name, audio_path, duration_ms, status, progress, model_id, error_code, \
                        error_message, attempts, has_edits, created_at, updated_at, started_at, finished_at";
 
-fn from_row(row: &Row<'_>) -> rusqlite::Result<(Job, String)> {
+pub(crate) fn from_row(row: &Row<'_>) -> rusqlite::Result<(Job, String)> {
     let status: String = row.get(4)?;
     let job = Job {
         id: row.get(0)?,
