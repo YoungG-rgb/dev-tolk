@@ -296,7 +296,7 @@ fn http_errors_are_mapped_to_clear_errors_with_import_hint() {
             |e| matches!(e, DownloadError::ProxyAuthRequired),
             true,
         ),
-        ("/notfound", |e| matches!(e, DownloadError::NotFound), false),
+        ("/notfound", |e| matches!(e, DownloadError::NotFound), true),
         ("/busy", |e| matches!(e, DownloadError::Server(503)), true),
         (
             "/ratelimit",

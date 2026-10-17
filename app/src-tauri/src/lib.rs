@@ -82,6 +82,7 @@ pub fn run() {
                 log = log.target(Target::new(TargetKind::Stderr));
             }
             app.handle().plugin(log.build())?;
+            tolk_core::diagnostics::install_panic_hook(); // паники попадают в журнал
 
             let (store, cleanup) = Store::open(layout)?;
             log::info!(

@@ -2,6 +2,7 @@
 //! Тонкий слой команд в `app` вызывает эти модули (TECHNICAL_DECISIONS §2).
 
 pub mod db;
+pub mod diagnostics;
 pub mod disk;
 pub mod download;
 pub mod error;
@@ -15,5 +16,6 @@ pub mod models;
 pub mod queue;
 pub mod store;
 pub mod transcript;
+pub mod user_errors;
 
 pub use error::{Result, StoreError};

@@ -212,6 +212,7 @@ pub fn export_to_file(t: &Transcript, opts: &ExportOptions, dest: &Path) -> Resu
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
+    crate::disk::ensure_space(dir, bytes.len() as u64)?;
     let mut tmp = tempfile::Builder::new()
         .prefix(".tolk-export-")
         .suffix(".part")

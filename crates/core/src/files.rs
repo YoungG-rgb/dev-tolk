@@ -74,6 +74,7 @@ impl JobFiles {
         let dest = self.job_file(job_id, name)?;
         self.ensure_job_dir(job_id)?;
         let mut input = File::open(source)?;
+        crate::disk::ensure_space(&self.layout.tmp_dir(), input.metadata()?.len())?;
         let tmp = self.new_temp()?;
         let mut out = BufWriter::with_capacity(1 << 20, tmp.reopen().map_err(map_write_error)?);
         let bytes = io::copy(&mut input, &mut out).map_err(map_write_error)?;

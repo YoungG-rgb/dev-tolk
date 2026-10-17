@@ -147,6 +147,10 @@ impl DownloadError {
                 | Self::RateLimited
                 | Self::Server(_)
                 | Self::UntrustedRedirect(_)
+                | Self::NotFound
+                | Self::UnexpectedStatus(_)
+                | Self::BadResponse(_)
+                | Self::HashMismatch
         )
     }
 
