@@ -167,6 +167,11 @@ pub fn from_store(err: &StoreError) -> UserMessage {
             err.to_string(),
             "Измените существующий термин вместо добавления нового.",
         ),
+        InvalidInput(text) => msg(
+            "INVALID_INPUT",
+            text.clone(),
+            "Исправьте значение и повторите.",
+        ),
         GlossaryNotFound => msg(
             "GLOSSARY_NOT_FOUND",
             "Термин не найден: возможно, его уже удалили.",

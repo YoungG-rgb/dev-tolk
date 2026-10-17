@@ -11,6 +11,7 @@ pub mod files;
 pub mod glossary;
 pub mod jobs;
 pub mod layout;
+pub mod metrics;
 pub mod model_manager;
 pub mod models;
 pub mod power;

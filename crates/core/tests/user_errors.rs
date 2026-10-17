@@ -187,6 +187,7 @@ fn all_store_errors() -> Vec<StoreError> {
         StoreError::Export("zip error".into()),
         StoreError::GlossaryInvalid("Термин не может быть пустым".into()),
         StoreError::GlossaryDuplicate("Jira".into()),
+        StoreError::InvalidInput("Оценка должна быть от 1 до 5".into()),
         StoreError::GlossaryNotFound,
         StoreError::JobNotFound("abc".into()),
         StoreError::InvalidTransition {

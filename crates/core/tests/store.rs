@@ -23,11 +23,11 @@ fn fresh_database_is_created_and_reopens_without_errors() {
     let path = dir.path().join("tolk.db");
     {
         let db = Db::open(&path).unwrap();
-        assert_eq!(db.schema_version().unwrap(), 2);
+        assert_eq!(db.schema_version().unwrap(), 3);
         jobs::insert(&db.conn(), &new_job("a.mp3")).unwrap();
     }
     let db = Db::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 2);
+    assert_eq!(db.schema_version().unwrap(), 3);
     let count: i64 = db
         .conn()
         .query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0))
@@ -57,7 +57,7 @@ fn v1_only() -> &'static [Migration] {
 }
 
 #[test]
-fn migration_v1_to_v2_preserves_data_on_a_copy() {
+fn migration_from_v1_to_latest_preserves_data_on_a_copy() {
     let dir = tempfile::tempdir().unwrap();
     let original = dir.path().join("tolk.db");
     let id = {
@@ -71,7 +71,7 @@ fn migration_v1_to_v2_preserves_data_on_a_copy() {
     fs::copy(&original, &copy).unwrap();
 
     let db = Db::open(&copy).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 2);
+    assert_eq!(db.schema_version().unwrap(), 3);
     let job = jobs::get(&db.conn(), &id)
         .unwrap()
         .expect("задание на месте");
@@ -135,7 +135,7 @@ fn database_from_a_newer_app_is_refused() {
     match Db::open(&path) {
         Err(StoreError::SchemaTooNew {
             found: 99,
-            supported: 2,
+            supported: 3,
         }) => {}
         other => panic!("ожидалась SchemaTooNew, получено {:?}", other.err()),
     }

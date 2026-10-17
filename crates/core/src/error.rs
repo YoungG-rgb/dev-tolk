@@ -37,6 +37,9 @@ pub enum StoreError {
     GlossaryInvalid(String),
     #[error("термин «{0}» уже есть в словаре")]
     GlossaryDuplicate(String),
+    /// Некорректное значение, переданное вызывающим кодом (например, оценка вне диапазона).
+    #[error("{0}")]
+    InvalidInput(String),
     #[error("термин не найден")]
     GlossaryNotFound,
     #[error("модель «{0}» не найдена в каталоге")]

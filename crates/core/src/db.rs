@@ -26,6 +26,10 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 2,
         sql: include_str!("../migrations/002_glossary.sql"),
     },
+    Migration {
+        version: 3,
+        sql: include_str!("../migrations/003_metrics.sql"),
+    },
 ];
 
 /// Применяет недостающие миграции. Каждая выполняется в отдельной транзакции вместе с повышением

@@ -205,9 +205,9 @@ pub fn default_file_name(title: &str) -> String {
     format!("{base}.docx")
 }
 
-/// Формирует документ и атомарно записывает его в `dest` (временный файл рядом, затем переименование).
-pub fn export_to_file(t: &Transcript, opts: &ExportOptions, dest: &Path) -> Result<()> {
-    let bytes = build_docx(t, opts)?;
+/// Атомарно записывает файл для пользователя: временный файл рядом, затем переименование.
+/// Права файла обычные (0644 на Unix), а не 0600, как у временных файлов.
+pub fn write_file_atomic(bytes: &[u8], dest: &Path) -> Result<()> {
     let dir = dest
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -217,9 +217,8 @@ pub fn export_to_file(t: &Transcript, opts: &ExportOptions, dest: &Path) -> Resu
         .prefix(".tolk-export-")
         .suffix(".part")
         .tempfile_in(dir)?;
-    tmp.write_all(&bytes)?;
+    tmp.write_all(bytes)?;
     tmp.as_file().sync_all()?;
-    // Временный файл создаётся с правами 0600; документ пользователя должен иметь обычные права.
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -227,4 +226,9 @@ pub fn export_to_file(t: &Transcript, opts: &ExportOptions, dest: &Path) -> Resu
     }
     tmp.persist(dest).map_err(|e| StoreError::Io(e.error))?;
     Ok(())
+}
+
+/// Формирует документ и атомарно записывает его в `dest`.
+pub fn export_to_file(t: &Transcript, opts: &ExportOptions, dest: &Path) -> Result<()> {
+    write_file_atomic(&build_docx(t, opts)?, dest)
 }
