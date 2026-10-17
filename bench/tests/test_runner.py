@@ -25,6 +25,7 @@ class RunnerTests(unittest.TestCase):
         for flag in ("-l", "ru", "-mc", "0", "--vad", "-vm"):
             self.assertIn(flag, cmd)
         self.assertNotIn("-ng", cmd)
+        self.assertNotIn("-nt", cmd, "--no-timestamps меняет распознавание и теряет слова")
         self.assertIn("ggml-large-v3-turbo-q5_0.bin", cmd[cmd.index("-m") + 1])
 
     def test_w2_has_no_vad_and_w4_disables_gpu(self):

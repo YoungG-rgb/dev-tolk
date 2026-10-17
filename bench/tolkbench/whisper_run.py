@@ -88,7 +88,9 @@ def prepare_audio(src: Path) -> tuple[Path, float]:
 
 def build_command(cfg: Config, wav: Path, out_prefix: Path, threads: int, prompt: str | None) -> list[str]:
     cmd = [str(WHISPER_CLI), "-m", str(MODELS_DIR / f"ggml-{cfg.model}.bin"), "-f", str(wav), "-l", "ru",
-           "-mc", "0", "-t", str(threads), "-np", "-nt", "-otxt", "-of", str(out_prefix)]
+           "-mc", "0", "-t", str(threads), "-np", "-otxt", "-of", str(out_prefix)]
+    # Флаг -nt (--no-timestamps) здесь НЕЛЬЗЯ: он меняет само распознавание (модель декодирует окна без меток времени)
+    # и на 4-минутной записи терял около половины слов. Файл -otxt и так пишется без таймкодов.
     if cfg.vad:
         cmd += ["--vad", "-vm", str(MODELS_DIR / VAD_MODEL)]
     if not cfg.gpu:
