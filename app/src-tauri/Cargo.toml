@@ -21,3 +21,8 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-log = "2"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
+
+[features]
+# Только для автоматической проверки собранного приложения (tools/ui-test): позволяет выполнить скрипт
+# в окне и записать результаты в файл. В выпускные сборки не входит.
+ui-test = []

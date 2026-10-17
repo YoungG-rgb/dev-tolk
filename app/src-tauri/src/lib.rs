@@ -2,6 +2,8 @@
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
 mod debug_transcribe;
+#[cfg(feature = "ui-test")]
+mod ui_test;
 
 use std::path::PathBuf;
 
@@ -56,6 +58,34 @@ fn report_csp_check(blocked: bool) {
     }
 }
 
+#[cfg(not(feature = "ui-test"))]
+macro_rules! handlers {
+    () => {
+        tauri::generate_handler![
+            app_info,
+            report_csp_check,
+            debug_transcribe::debug_models,
+            debug_transcribe::debug_transcribe,
+            debug_transcribe::debug_cancel
+        ]
+    };
+}
+
+#[cfg(feature = "ui-test")]
+macro_rules! handlers {
+    () => {
+        tauri::generate_handler![
+            app_info,
+            report_csp_check,
+            debug_transcribe::debug_models,
+            debug_transcribe::debug_transcribe,
+            debug_transcribe::debug_cancel,
+            ui_test::ui_test_report,
+            ui_test::ui_test_close
+        ]
+    };
+}
+
 pub fn run() {
     tauri::Builder::default()
         // Должен быть первым: второй запуск передаёт управление первому экземпляру и завершается.
@@ -106,6 +136,8 @@ pub fn run() {
                 std::env::consts::ARCH,
                 data.display()
             );
+            #[cfg(feature = "ui-test")]
+            ui_test::start(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -115,13 +147,7 @@ pub fn run() {
                 window.state::<debug_transcribe::ActiveRun>().cancel();
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            app_info,
-            report_csp_check,
-            debug_transcribe::debug_models,
-            debug_transcribe::debug_transcribe,
-            debug_transcribe::debug_cancel
-        ])
+        .invoke_handler(handlers!())
         .run(tauri::generate_context!())
         .expect("не удалось запустить приложение");
 }
