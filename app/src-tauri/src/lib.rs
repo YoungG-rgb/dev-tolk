@@ -1,6 +1,8 @@
 //! Оболочка приложения dev-tolk (Tauri 2). На этапе MVP-012 — только каркас:
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
+mod debug_transcribe;
+
 use std::path::PathBuf;
 
 use serde::Serialize;
@@ -93,6 +95,7 @@ pub fn run() {
                 cleanup.orphans_removed.len()
             );
             app.manage(store);
+            app.manage(debug_transcribe::ActiveRun::default());
             // Запрет сна на время обработки: исполнитель очереди (MVP-016) вызывает `sync_with_queue` после переходов.
             app.manage(std::sync::Mutex::new(tolk_core::power::SleepInhibitor::new()));
 
@@ -105,7 +108,20 @@ pub fn run() {
             );
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_info, report_csp_check])
+        .on_window_event(|window, event| {
+            // Закрытие окна отменяет идущую обработку: дочерний процесс не остаётся (при аварийном
+            // завершении приложения движок завершается сам, см. `--exit-on-stdin-close`).
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                window.state::<debug_transcribe::ActiveRun>().cancel();
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            report_csp_check,
+            debug_transcribe::debug_models,
+            debug_transcribe::debug_transcribe,
+            debug_transcribe::debug_cancel
+        ])
         .run(tauri::generate_context!())
         .expect("не удалось запустить приложение");
 }

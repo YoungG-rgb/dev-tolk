@@ -54,6 +54,9 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "signingIdentity": "-"
-    }
+    },
+    "externalBin": [
+      "binaries/tolk-engine"
+    ]
   }
 }

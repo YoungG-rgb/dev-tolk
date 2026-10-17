@@ -37,6 +37,8 @@ pub struct Args {
     pub language: String,
     pub threads: Option<usize>,
     pub no_gpu: bool,
+    /// Завершаться, когда родитель закрыл stdin (родитель погиб): дочерний процесс не остаётся висеть.
+    pub exit_on_stdin_close: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -130,9 +132,30 @@ fn check_cancelled() -> Result<()> {
     }
 }
 
+/// Следит за stdin: EOF означает, что приложение закрыло канал или погибло. Итоговый файл пишется
+/// атомарно, поэтому внезапное завершение не оставляет частичного результата.
+fn watch_parent_stdin() {
+    std::thread::spawn(|| {
+        let mut sink = [0u8; 256];
+        let mut stdin = std::io::stdin().lock();
+        while matches!(std::io::Read::read(&mut stdin, &mut sink), Ok(n) if n > 0) {}
+        // `_exit`, а не `exit`: обработчики atexit библиотеки ggml (Metal) при работающем распознавании падают сигналом.
+        // SAFETY: немедленное завершение процесса без очистки; результат пишется атомарно, потерять нечего.
+        #[cfg(unix)]
+        unsafe {
+            libc::_exit(143)
+        }
+        #[cfg(not(unix))]
+        std::process::exit(143);
+    });
+}
+
 pub fn run(args: &Args) -> Result<Outcome> {
     let started = Instant::now();
     install_cancel_handler();
+    if args.exit_on_stdin_close {
+        watch_parent_stdin();
+    }
 
     // Всё, что можно проверить до дорогой работы, проверяется до неё: ошибка модели не ждёт декодирования.
     check_file(&args.model, "Модель распознавания")?;

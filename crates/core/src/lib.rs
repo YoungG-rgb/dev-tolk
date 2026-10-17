@@ -5,6 +5,7 @@ pub mod db;
 pub mod diagnostics;
 pub mod disk;
 pub mod download;
+pub mod engine;
 pub mod error;
 pub mod export;
 pub mod files;

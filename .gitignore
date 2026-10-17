@@ -40,3 +40,6 @@ Thumbs.db
 # Короткие тестовые фикстуры (< 1 МБ суммарно, генерируются tools/gen-fixtures.sh)
 !/crates/engine/tests/fixtures/
 !/crates/engine/tests/fixtures/*
+
+# Сайдкар движка собирается tools/prepare-sidecar.sh
+/app/src-tauri/binaries/

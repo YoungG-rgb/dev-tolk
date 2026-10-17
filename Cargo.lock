@@ -4831,6 +4831,7 @@ dependencies = [
  "docx-rs",
  "fs4",
  "keepawake",
+ "libc",
  "log",
  "reqwest",
  "roxmltree",

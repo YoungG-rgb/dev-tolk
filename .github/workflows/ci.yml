@@ -51,6 +51,9 @@ jobs:
           npm ci
           npm run check
           npm run build
+      - name: Сайдкар (tolk-engine для externalBin)
+        shell: bash
+        run: tools/prepare-sidecar.sh
       - run: cargo clippy -p tolk-app --all-targets -- -D warnings
       - name: Сборка неподписанного приложения
         working-directory: app

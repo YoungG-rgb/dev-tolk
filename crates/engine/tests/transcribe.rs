@@ -530,3 +530,66 @@ fn sigkill_mid_run_leaves_no_result_file() {
         "после принудительного завершения итогового файла нет"
     );
 }
+
+/// Приложение погибло: канал stdin закрылся. Движок не должен остаться висеть и не оставляет результата.
+#[cfg(unix)]
+#[test]
+fn engine_exits_by_itself_when_parent_closes_stdin() {
+    let (model, vad) = require_models!();
+    let audio = require_speech!(8);
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("o.json");
+    let mut child = Command::new(ENGINE)
+        .arg("transcribe")
+        .arg("--model")
+        .arg(&model)
+        .arg("--vad-model")
+        .arg(&vad)
+        .arg("--input")
+        .arg(&audio)
+        .arg("--output")
+        .arg(&out)
+        .arg("--exit-on-stdin-close")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    loop {
+        let mut line = String::new();
+        assert!(
+            reader.read_line(&mut line).unwrap() > 0,
+            "процесс завершился раньше времени"
+        );
+        if line.contains("\"type\":\"segment\"") {
+            break;
+        }
+    }
+    drop(child.stdin.take()); // «родитель погиб»
+    let started = std::time::Instant::now();
+    let status = child.wait().unwrap();
+    assert!(
+        started.elapsed().as_secs() < 3,
+        "движок завершился не сразу: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(status.code(), Some(143));
+    assert!(!out.exists(), "результата нет");
+    assert!(leftovers(dir.path()).is_empty());
+}
+
+#[test]
+fn exit_on_stdin_close_flag_is_accepted_without_a_pipe() {
+    let r = transcribe(&[os("--exit-on-stdin-close")]);
+    assert_eq!(
+        r.code,
+        Some(2),
+        "аргумент известен; ошибка только в отсутствующих обязательных"
+    );
+    assert!(
+        r.last()["message"].as_str().unwrap().contains("--model"),
+        "{:?}",
+        r.last()
+    );
+}

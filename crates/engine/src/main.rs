@@ -28,6 +28,7 @@ tolk-engine — движок транскрибации dev-tolk
   tolk-engine extract <файл> <out.wav>   аудио -> WAV 16 кГц моно 16 бит
   tolk-engine transcribe --model <модель> --input <файл> --output <original.json>
                          [--vad-model <модель>] [--language ru] [--threads N] [--no-gpu]
+                         [--exit-on-stdin-close]
   tolk-engine --version
 ";
 
@@ -106,6 +107,7 @@ fn parse_transcribe_args(args: &[OsString]) -> Result<transcribe::Args> {
     let mut language = "ru".to_string();
     let mut threads = None;
     let mut no_gpu = false;
+    let mut exit_on_stdin_close = false;
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         let name = flag.to_str().unwrap_or("");
@@ -129,6 +131,8 @@ fn parse_transcribe_args(args: &[OsString]) -> Result<transcribe::Args> {
                 );
             }
             "--no-gpu" => no_gpu = true,
+            // Приложение держит открытым канал stdin: если оно погибло, канал закрывается и движок завершается сам.
+            "--exit-on-stdin-close" => exit_on_stdin_close = true,
             other => return Err(usage(format!("transcribe: неизвестный аргумент {other}"))),
         }
     }
@@ -140,6 +144,7 @@ fn parse_transcribe_args(args: &[OsString]) -> Result<transcribe::Args> {
         language,
         threads,
         no_gpu,
+        exit_on_stdin_close,
     })
 }
 
