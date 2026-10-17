@@ -32,6 +32,13 @@ pub enum StoreError {
         from: &'static str,
         to: &'static str,
     },
+    /// Некорректные данные словаря или файл словаря; текст готов к показу пользователю.
+    #[error("{0}")]
+    GlossaryInvalid(String),
+    #[error("термин «{0}» уже есть в словаре")]
+    GlossaryDuplicate(String),
+    #[error("термин не найден")]
+    GlossaryNotFound,
     #[error("неизвестный статус задания: {0}")]
     UnknownStatus(String),
 }

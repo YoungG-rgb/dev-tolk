@@ -23,11 +23,11 @@ fn fresh_database_is_created_and_reopens_without_errors() {
     let path = dir.path().join("tolk.db");
     {
         let db = Db::open(&path).unwrap();
-        assert_eq!(db.schema_version().unwrap(), 1);
+        assert_eq!(db.schema_version().unwrap(), 2);
         jobs::insert(&db.conn(), &new_job("a.mp3")).unwrap();
     }
     let db = Db::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 1);
+    assert_eq!(db.schema_version().unwrap(), 2);
     let count: i64 = db
         .conn()
         .query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0))
@@ -51,17 +51,18 @@ fn reliability_pragmas_are_applied() {
     assert_eq!(get("busy_timeout"), "Integer(5000)");
 }
 
-const V2_ADD_COLUMN: Migration = Migration {
-    version: 2,
-    sql: "ALTER TABLE jobs ADD COLUMN note TEXT;",
-};
+/// Схема v1, как она была до словаря: база, созданная прежней версией приложения.
+fn v1_only() -> &'static [Migration] {
+    &MIGRATIONS[..1]
+}
 
 #[test]
 fn migration_v1_to_v2_preserves_data_on_a_copy() {
     let dir = tempfile::tempdir().unwrap();
     let original = dir.path().join("tolk.db");
     let id = {
-        let db = Db::open(&original).unwrap();
+        let db = Db::open_with(&original, v1_only()).unwrap();
+        assert_eq!(db.schema_version().unwrap(), 1);
         db.set_setting("language", "ru").unwrap();
         let job = jobs::insert(&db.conn(), &new_job("совещание.m4a")).unwrap();
         job.id
@@ -69,27 +70,34 @@ fn migration_v1_to_v2_preserves_data_on_a_copy() {
     let copy = dir.path().join("copy.db");
     fs::copy(&original, &copy).unwrap();
 
-    let migrations = [MIGRATIONS[0], V2_ADD_COLUMN];
-    let db = Db::open_with(&copy, &migrations).unwrap();
+    let db = Db::open(&copy).unwrap();
     assert_eq!(db.schema_version().unwrap(), 2);
     let job = jobs::get(&db.conn(), &id)
         .unwrap()
         .expect("задание на месте");
     assert_eq!(job.source_name, "совещание.m4a");
     assert_eq!(db.setting("language").unwrap().as_deref(), Some("ru"));
-    db.conn()
-        .execute("UPDATE jobs SET note = 'ok' WHERE id = ?1", [&id])
+    let terms: i64 = db
+        .conn()
+        .query_row("SELECT COUNT(*) FROM glossary_terms", [], |r| r.get(0))
         .unwrap();
+    assert_eq!(terms, 0, "таблица словаря создана миграцией");
 
     // Исходная база не тронута.
-    assert_eq!(Db::open(&original).unwrap().schema_version().unwrap(), 1);
+    assert_eq!(
+        Db::open_with(&original, v1_only())
+            .unwrap()
+            .schema_version()
+            .unwrap(),
+        1
+    );
 }
 
 #[test]
 fn failed_migration_rolls_back_completely() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("tolk.db");
-    Db::open(&path).unwrap();
+    Db::open_with(&path, v1_only()).unwrap();
     let bad = Migration {
         version: 2,
         sql: "ALTER TABLE jobs ADD COLUMN half_done TEXT; SELECT * FROM no_such_table;",
@@ -99,8 +107,8 @@ fn failed_migration_rolls_back_completely() {
         .expect("ошибка миграции");
     assert!(matches!(err, StoreError::Db(_)));
 
-    let db = Db::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 1);
+    let db = Db::open_with(&path, v1_only()).unwrap();
+    assert_eq!(db.schema_version().unwrap(), 1, "версия не повышена");
     let cols: Vec<String> = db
         .conn()
         .prepare("PRAGMA table_info(jobs)")
@@ -127,7 +135,7 @@ fn database_from_a_newer_app_is_refused() {
     match Db::open(&path) {
         Err(StoreError::SchemaTooNew {
             found: 99,
-            supported: 1,
+            supported: 2,
         }) => {}
         other => panic!("ожидалась SchemaTooNew, получено {:?}", other.err()),
     }

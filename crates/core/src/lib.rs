@@ -5,6 +5,7 @@ pub mod db;
 pub mod error;
 pub mod export;
 pub mod files;
+pub mod glossary;
 pub mod jobs;
 pub mod layout;
 pub mod queue;

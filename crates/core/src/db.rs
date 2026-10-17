@@ -17,10 +17,16 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    sql: include_str!("../migrations/001_init.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        sql: include_str!("../migrations/001_init.sql"),
+    },
+    Migration {
+        version: 2,
+        sql: include_str!("../migrations/002_glossary.sql"),
+    },
+];
 
 /// Применяет недостающие миграции. Каждая выполняется в отдельной транзакции вместе с повышением
 /// `user_version`: при сбое на середине база остаётся на прежней версии. Возвращает итоговую версию.
