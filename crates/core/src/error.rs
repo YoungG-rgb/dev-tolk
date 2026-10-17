@@ -39,6 +39,13 @@ pub enum StoreError {
     GlossaryDuplicate(String),
     #[error("термин не найден")]
     GlossaryNotFound,
+    #[error("модель «{0}» не найдена в каталоге")]
+    UnknownModel(String),
+    #[error("модель «{0}» не установлена")]
+    ModelNotInstalled(String),
+    /// Модель используется заданием в обработке: удалять её нельзя.
+    #[error("модель «{0}» сейчас используется заданием в обработке")]
+    ModelInUse(String),
     #[error("неизвестный статус задания: {0}")]
     UnknownStatus(String),
 }

@@ -10,6 +10,7 @@ pub mod files;
 pub mod glossary;
 pub mod jobs;
 pub mod layout;
+pub mod model_manager;
 pub mod models;
 pub mod queue;
 pub mod store;
