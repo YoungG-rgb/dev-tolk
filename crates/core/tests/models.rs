@@ -147,3 +147,25 @@ fn system_detection_returns_sane_values() {
         assert!(s.avx2.is_some());
     }
 }
+
+#[test]
+fn required_downloads_lists_model_and_vad_until_installed() {
+    use tolk_core::download::required_downloads;
+    let dir = tempfile::tempdir().unwrap();
+    let ids = |v: Vec<&tolk_core::models::ModelEntry>| {
+        v.into_iter().map(|m| m.id.clone()).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        ids(required_downloads(DEFAULT_MODEL_ID, dir.path()).unwrap()),
+        vec![DEFAULT_MODEL_ID, VAD_MODEL_ID]
+    );
+
+    // Установленной считается модель с файлом правильного размера.
+    let vad = find(VAD_MODEL_ID).unwrap();
+    std::fs::write(dir.path().join(&vad.file), vec![0u8; vad.size as usize]).unwrap();
+    assert_eq!(
+        ids(required_downloads(DEFAULT_MODEL_ID, dir.path()).unwrap()),
+        vec![DEFAULT_MODEL_ID]
+    );
+    assert!(required_downloads("нет такой", dir.path()).is_none());
+}

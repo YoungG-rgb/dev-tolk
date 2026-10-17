@@ -2,6 +2,8 @@
 //! Тонкий слой команд в `app` вызывает эти модули (TECHNICAL_DECISIONS §2).
 
 pub mod db;
+pub mod disk;
+pub mod download;
 pub mod error;
 pub mod export;
 pub mod files;
