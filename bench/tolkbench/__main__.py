@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import corpus, metrics, prepare, repeats, terms, whisper_run
+from . import corpus, metrics, prepare, repeats, sps, terms, whisper_run
 
 
 def cmd_score(args: argparse.Namespace) -> None:
@@ -73,9 +73,22 @@ def cmd_manifest(args: argparse.Namespace) -> None:
         print(f"Не указана дата согласия: {', '.join(missing)} (колонка consent_date или --consent-date ГГГГ-ММ-ДД).")
 
 
+def cmd_build_sps(args: argparse.Namespace) -> None:
+    r = sps.build(Path(args.src), Path(args.dest), args.minutes, args.speaker)
+    print(f"{r['wav']}: {r['clips']} клипов, {r['seconds'] / 60:.1f} мин, диктор {r['speaker']}…, {r['words']} слов в эталоне")
+    print(f"Эталон: {r['ref']}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="tolkbench")
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("build-sps", help="склеить клипы Common Voice Spontaneous Speech одного диктора в длинную запись с эталоном")
+    p.add_argument("src", help="каталог распакованного sps-corpus (с ss-corpus-ru.tsv и audios/)")
+    p.add_argument("dest", help="куда положить S1.wav и S1.ref.txt (вне репозитория)")
+    p.add_argument("--minutes", type=float, default=45)
+    p.add_argument("--speaker", help="client_id диктора (по умолчанию — с наибольшей суммарной длительностью)")
+    p.set_defaults(fn=cmd_build_sps)
 
     p = sub.add_parser("score", help="WER/CER, повторы и точность терминов для результата")
     p.add_argument("hyp", help="текст результата")

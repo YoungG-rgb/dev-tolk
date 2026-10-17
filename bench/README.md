@@ -13,6 +13,7 @@ python3 fetch_models.py large-v3-turbo-q5_0 silero-vad-v6.2.0 --yes    # заг�
 
 python3 -m tolkbench check-corpus ~/corpus --minimal   # проверка корпуса по docs/CORPUS_REQUIREMENTS.md
 python3 -m tolkbench prepare-fragment ~/corpus A1 --start 20:00   # 5-минутный фрагмент + черновик (large-v3-q5_0)
+python3 -m tolkbench build-sps <sps-corpus/> ~/corpus/sps-ru   # длинная запись из клипов Common Voice Spontaneous Speech (CC0) с эталоном S1.ref.txt; не заменяет корпус MVP-002
 python3 -m tolkbench manifest ~/corpus --consent-date 2026-10-18  # manifest.csv: SHA-256, длительность, кодек
 python3 -m tolkbench hashes ~/corpus/recordings        # только SHA-256 файлов
 python3 -m tolkbench whisper W1 ~/corpus/a1.m4a --machine H2 --record A1 --threads 4
