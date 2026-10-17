@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use serde::Serialize;
 use tauri::{Manager, Runtime};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
-use tolk_core::db::Db;
 use tolk_core::layout::DataLayout;
+use tolk_core::store::Store;
 
 /// Размер файла журнала, после которого он ротируется, в байтах.
 const LOG_MAX_FILE_BYTES: u128 = 2 * 1024 * 1024;
@@ -67,7 +67,7 @@ pub fn run() {
         .setup(|app| {
             let data = data_dir(app.handle())?;
             let layout = DataLayout::new(&data);
-            layout.ensure()?;
+            layout.ensure()?; // каталог `logs` нужен журналу до открытия хранилища
 
             let mut log = tauri_plugin_log::Builder::new()
                 .clear_targets()
@@ -83,9 +83,14 @@ pub fn run() {
             }
             app.handle().plugin(log.build())?;
 
-            let db = Db::open(&layout.db_path())?;
-            log::info!("База данных открыта, версия схемы {}", db.schema_version()?);
-            app.manage(db);
+            let (store, cleanup) = Store::open(layout)?;
+            log::info!(
+                "Хранилище открыто, версия схемы {}; очистка при старте: временных файлов {}, каталогов без записи {}",
+                store.db.schema_version()?,
+                cleanup.tmp_removed,
+                cleanup.orphans_removed.len()
+            );
+            app.manage(store);
 
             log::info!(
                 "dev-tolk {} запущен ({} {}), данные: {}",

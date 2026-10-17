@@ -129,3 +129,17 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<Job>> {
         })
         .transpose()
 }
+
+/// Идентификаторы всех заданий (для поиска «осиротевших» каталогов).
+pub fn all_ids(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT id FROM jobs")?;
+    let ids = stmt
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
+    Ok(ids)
+}
+
+/// Удаляет запись о задании. Возвращает, была ли такая запись.
+pub fn delete(conn: &Connection, id: &str) -> Result<bool> {
+    Ok(conn.execute("DELETE FROM jobs WHERE id = ?1", [id])? > 0)
+}

@@ -3,7 +3,9 @@
 
 pub mod db;
 pub mod error;
+pub mod files;
 pub mod jobs;
 pub mod layout;
+pub mod store;
 
 pub use error::{Result, StoreError};

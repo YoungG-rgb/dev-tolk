@@ -11,6 +11,14 @@ pub enum StoreError {
     SchemaTooNew { found: u32, supported: u32 },
     #[error("некорректный список миграций: {0}")]
     BadMigrations(&'static str),
+    /// На диске не хватило места (ошибка записи ОС).
+    #[error("недостаточно места на диске")]
+    NoSpace,
+    /// Файл занят другим процессом (антивирус, Word и т. п.) и не освободился за время повторов.
+    #[error("файл занят другой программой: {0}")]
+    FileBusy(String),
+    #[error("недопустимый идентификатор задания: {0}")]
+    InvalidId(String),
     #[error("неизвестный статус задания: {0}")]
     UnknownStatus(String),
 }
