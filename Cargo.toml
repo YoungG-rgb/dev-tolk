@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/engine"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+# panic = "unwind" (по умолчанию): движок перехватывает panic в декодерах через catch_unwind (R-08).

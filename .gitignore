@@ -1,0 +1,42 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node / Svelte
+node_modules/
+dist/
+
+# Tauri
+/src-tauri/gen/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Тестовый корпус, модели и результаты замеров с данными — только вне репозитория (MVP-002)
+/corpus/
+/bench/audio/
+*.bin
+*.gguf
+*.onnx
+*.part
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.opus
+*.flac
+*.mp4
+*.mov
+
+# Локальные файлы Claude Code
+.claude/settings.local.json
+
+# Короткие тестовые фикстуры (< 1 МБ суммарно, генерируются tools/gen-fixtures.sh)
+!/crates/engine/tests/fixtures/
+!/crates/engine/tests/fixtures/*
