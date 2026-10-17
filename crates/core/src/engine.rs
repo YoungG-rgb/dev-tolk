@@ -128,18 +128,28 @@ pub enum RunResult {
     },
 }
 
-/// Запускает `transcribe` и ждёт завершения. `on_event` вызывается из вызывающего потока.
-/// Ошибка `io::Error` — только если процесс не удалось запустить.
-pub fn run_transcribe(
+/// Итог запуска процесса без разбора событий.
+#[derive(Debug, Clone)]
+pub struct RawRun {
+    /// Отмену запросили, и процесс остановлен из-за неё.
+    pub cancel_requested: bool,
+    pub exit_code: Option<i32>,
+    pub stderr_tail: String,
+}
+
+/// Запускает движок с произвольными аргументами и передаёт каждую строку stdout в `on_line` (из
+/// вызывающего потока). Отмена, принудительное завершение и защита от «осиротевшего» процесса — как у
+/// `transcribe`. Ошибка `io::Error` — только если процесс не удалось запустить.
+pub fn run_lines(
     exe: &Path,
-    args: &TranscribeArgs,
+    args: &[OsString],
     stderr_log: Option<&Path>,
     cancel: &CancelToken,
-    on_event: &mut dyn FnMut(&EngineEvent),
-) -> io::Result<RunResult> {
+    on_line: &mut dyn FnMut(&str),
+) -> io::Result<RawRun> {
     let mut command = Command::new(exe);
     command
-        .args(args.to_command_args())
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
     match stderr_log {
@@ -151,29 +161,19 @@ pub fn run_transcribe(
     let _stdin_keepalive = child.stdin.take();
     let stdout = child.stdout.take().expect("stdout запрошен как piped");
 
-    let (tx, rx) = mpsc::channel::<EngineEvent>();
+    let (tx, rx) = mpsc::channel::<String>();
     let reader = thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if let Some(event) = parse_line(&line) {
-                if tx.send(event).is_err() {
-                    break;
-                }
+            if tx.send(line).is_err() {
+                break;
             }
         }
     });
 
-    let mut terminal: Option<RunResult> = None;
     let mut cancel_requested_at: Option<Instant> = None;
     loop {
         match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok(event) => {
-                match &event {
-                    EngineEvent::Done(info) => terminal = Some(RunResult::Done(info.clone())),
-                    EngineEvent::Error(info) => terminal = Some(RunResult::Failed(info.clone())),
-                    _ => {}
-                }
-                on_event(&event);
-            }
+            Ok(line) => on_line(&line),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
         }
@@ -192,13 +192,45 @@ pub fn run_transcribe(
     }
     let _ = reader.join();
     let status = child.wait()?;
-
-    if cancel_requested_at.is_some() && !matches!(terminal, Some(RunResult::Done(_))) {
-        return Ok(RunResult::Cancelled);
-    }
-    Ok(terminal.unwrap_or_else(|| RunResult::Crashed {
+    Ok(RawRun {
+        cancel_requested: cancel_requested_at.is_some(),
         exit_code: status.code(),
         stderr_tail: stderr_log.map(tail_of).unwrap_or_default(),
+    })
+}
+
+/// Запускает `transcribe` и ждёт завершения. `on_event` вызывается из вызывающего потока.
+/// Ошибка `io::Error` — только если процесс не удалось запустить.
+pub fn run_transcribe(
+    exe: &Path,
+    args: &TranscribeArgs,
+    stderr_log: Option<&Path>,
+    cancel: &CancelToken,
+    on_event: &mut dyn FnMut(&EngineEvent),
+) -> io::Result<RunResult> {
+    let mut terminal: Option<RunResult> = None;
+    let raw = run_lines(
+        exe,
+        &args.to_command_args(),
+        stderr_log,
+        cancel,
+        &mut |line| {
+            if let Some(event) = parse_line(line) {
+                match &event {
+                    EngineEvent::Done(info) => terminal = Some(RunResult::Done(info.clone())),
+                    EngineEvent::Error(info) => terminal = Some(RunResult::Failed(info.clone())),
+                    _ => {}
+                }
+                on_event(&event);
+            }
+        },
+    )?;
+    if raw.cancel_requested && !matches!(terminal, Some(RunResult::Done(_))) {
+        return Ok(RunResult::Cancelled);
+    }
+    Ok(terminal.unwrap_or(RunResult::Crashed {
+        exit_code: raw.exit_code,
+        stderr_tail: raw.stderr_tail,
     }))
 }
 

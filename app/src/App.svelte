@@ -57,7 +57,15 @@
   type JobEvent =
     | { kind: 'started'; jobId: string }
     | { kind: 'progress'; jobId: string; percent: number }
-    | { kind: 'finished'; jobId: string; status: Job['status']; errorCode: string | null; errorMessage: string | null };
+    | { kind: 'finished'; jobId: string; status: Job['status']; errorCode: string | null; errorMessage: string | null }
+    | { kind: 'importStarted'; index: number; total: number; name: string }
+    | { kind: 'importProgress'; index: number; percent: number }
+    | { kind: 'importAccepted'; index: number; name: string; jobId: string; warnings: string[] }
+    | { kind: 'importRejected'; index: number; name: string; code: string; message: string; action: string }
+    | { kind: 'importBatchDone'; total: number; accepted: number; rejected: number; cancelled: boolean }
+    | { kind: 'importBusy' };
+
+  type ImportNote = { name: string; text: string; ok: boolean };
 
   const STATUS: Record<Job['status'], string> = {
     QUEUED: 'в очереди',
@@ -72,6 +80,8 @@
   let filePath = $state('');
   let jobs = $state<Job[]>([]);
   let message = $state<string | null>(null);
+  let importing = $state<{ name: string; index: number; total: number; percent: number | null } | null>(null);
+  let importNotes = $state<ImportNote[]>([]);
 
   const refresh = () =>
     invoke<Job[]>('jobs_list').then((list) => (jobs = list));
@@ -86,6 +96,29 @@
 
     const channel = new Channel<JobEvent>();
     channel.onmessage = (e) => {
+      switch (e.kind) {
+        case 'importStarted':
+          if (e.index === 0) importNotes = [];
+          importing = { name: e.name, index: e.index, total: e.total, percent: null };
+          return;
+        case 'importProgress':
+          if (importing) importing.percent = e.percent;
+          return;
+        case 'importAccepted':
+          for (const w of e.warnings) importNotes.push({ name: e.name, text: w, ok: true });
+          void refresh();
+          return;
+        case 'importRejected':
+          importNotes.push({ name: e.name, text: `${e.message} ${e.action}`, ok: false });
+          return;
+        case 'importBatchDone':
+          importing = null;
+          void refresh();
+          return;
+        case 'importBusy':
+          message = 'Импорт уже идёт: дождитесь окончания или отмените его.';
+          return;
+      }
       const job = jobs.find((j) => j.id === e.jobId);
       if (e.kind === 'progress' && job) job.progress = e.percent;
       // Начало и конец меняют статус и ошибку: берём актуальное состояние из базы.
@@ -97,12 +130,14 @@
   async function enqueue() {
     message = null;
     try {
-      await invoke('debug_enqueue', { file: filePath, modelId });
-      await refresh();
+      await invoke('import_paths', { paths: [filePath] });
     } catch (e) {
       message = String(e);
     }
   }
+
+  const pick = () => void invoke('import_pick').catch((e) => (message = String(e)));
+  const cancelImport = () => void invoke('import_cancel');
 
   async function act(command: 'job_cancel' | 'job_retry', id: string) {
     message = null;
@@ -154,8 +189,24 @@
       </select>
     </label>
     <div class="row">
+      <button onclick={pick}>Выбрать файлы…</button>
       <button onclick={enqueue} disabled={!filePath || !modelId}>Начать</button>
+      <span class="muted">или перетащите файлы в окно</span>
     </div>
+    {#if importing}
+      <p class="importing" role="status">
+        Импорт {importing.index + 1} из {importing.total}: {importing.name}
+        {#if importing.percent !== null}<progress max="100" value={importing.percent}></progress> {importing.percent}%{/if}
+        <button onclick={cancelImport}>Отменить импорт</button>
+      </p>
+    {/if}
+    {#if importNotes.length}
+      <ul class="notes">
+        {#each importNotes as note}
+          <li class={note.ok ? 'warn' : 'error'}><b>{note.name}:</b> {note.text}</li>
+        {/each}
+      </ul>
+    {/if}
     {#if message}<p role="status">{message}</p>{/if}
     <ul class="jobs">
       {#each jobs as job (job.id)}

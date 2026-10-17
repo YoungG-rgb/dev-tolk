@@ -1,6 +1,7 @@
 //! Оболочка приложения dev-tolk (Tauri 2). На этапе MVP-012 — только каркас:
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
+mod import_commands;
 mod queue_commands;
 #[cfg(feature = "ui-test")]
 mod ui_test;
@@ -79,7 +80,9 @@ macro_rules! handlers {
             queue_commands::job_cancel,
             queue_commands::job_retry,
             queue_commands::debug_models,
-            queue_commands::debug_enqueue
+            import_commands::import_pick,
+            import_commands::import_paths,
+            import_commands::import_cancel
         ]
     };
 }
@@ -95,7 +98,9 @@ macro_rules! handlers {
             queue_commands::job_cancel,
             queue_commands::job_retry,
             queue_commands::debug_models,
-            queue_commands::debug_enqueue,
+            import_commands::import_pick,
+            import_commands::import_paths,
+            import_commands::import_cancel,
             ui_test::ui_test_report,
             ui_test::ui_test_close
         ]
@@ -112,6 +117,7 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data = data_dir(app.handle())?;
             let layout = DataLayout::new(&data);
@@ -153,11 +159,12 @@ pub fn run() {
                 Arc::clone(&store),
                 engine,
                 inhibitor,
-                Arc::new(move |event| sink_subscribers.publish(event)),
+                Arc::new(move |event| sink_subscribers.publish(queue_commands::AppEvent::Job(event))),
             );
             executor.spawn();
             app.manage(store);
             app.manage(subscribers);
+            app.manage(import_commands::ImportState::default());
             app.manage(executor);
 
             log::info!(
@@ -175,7 +182,11 @@ pub fn run() {
             // Закрытие окна прерывает идущую обработку (задание получает статус «Обработка прервана»,
             // как при сбое); при аварийном завершении приложения движок завершается сам
             // (`--exit-on-stdin-close`).
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                import_commands::start_import(window.app_handle(), paths.clone());
+            }
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                window.state::<import_commands::ImportState>().cancel();
                 let executor = window.state::<Arc<Executor>>();
                 executor.shutdown();
                 if !executor.wait_idle(SHUTDOWN_WAIT) {

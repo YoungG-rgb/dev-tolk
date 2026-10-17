@@ -7,22 +7,30 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
-use tolk_core::download::is_installed;
 use tolk_core::executor::{Executor, JobEvent};
-use tolk_core::jobs::{self, Job, NewJob};
+use tolk_core::import::ImportEvent;
+use tolk_core::jobs::{self, Job};
 use tolk_core::layout::DataLayout;
 use tolk_core::model_manager;
-use tolk_core::models::{find, SystemInfo};
+use tolk_core::models::SystemInfo;
 use tolk_core::queue;
 use tolk_core::store::Store;
 use tolk_core::user_errors;
 
-/// Каналы, в которые рассылаются события заданий (по одному на подписавшееся окно).
+/// Всё, что приложение сообщает интерфейсу о заданиях и импорте (разные значения `kind`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum AppEvent {
+    Job(JobEvent),
+    Import(ImportEvent),
+}
+
+/// Каналы, в которые рассылаются события (по одному на подписавшееся окно).
 #[derive(Default)]
-pub struct Subscribers(Mutex<Vec<Channel<JobEvent>>>);
+pub struct Subscribers(Mutex<Vec<Channel<AppEvent>>>);
 
 impl Subscribers {
-    pub fn publish(&self, event: JobEvent) {
+    pub fn publish(&self, event: AppEvent) {
         let mut channels = self.0.lock().unwrap_or_else(|e| e.into_inner());
         channels.retain(|c| c.send(event.clone()).is_ok());
     }
@@ -105,7 +113,7 @@ pub fn jobs_list(store: State<'_, Arc<Store>>) -> Result<Vec<JobDto>, String> {
 }
 
 #[tauri::command]
-pub fn jobs_subscribe(subscribers: State<'_, Arc<Subscribers>>, on_event: Channel<JobEvent>) {
+pub fn jobs_subscribe(subscribers: State<'_, Arc<Subscribers>>, on_event: Channel<AppEvent>) {
     subscribers
         .0
         .lock()
@@ -122,12 +130,12 @@ pub fn job_cancel(
     let job = executor.cancel_job(&id).map_err(|e| user_error(&e))?;
     // Отмена задания в очереди завершается сразу; об идущем сообщит исполнитель после остановки движка.
     if job.status == jobs::JobStatus::Cancelled {
-        subscribers.publish(JobEvent::Finished {
+        subscribers.publish(AppEvent::Job(JobEvent::Finished {
             job_id: id,
             status: "CANCELLED".into(),
             error_code: None,
             error_message: None,
-        });
+        }));
     }
     Ok(job.into())
 }
@@ -170,59 +178,4 @@ pub fn debug_models(
             installed: s.installed,
         })
         .collect())
-}
-
-/// Ставит файл в очередь: копирует в хранилище и создаёт задание. Временная замена импорту (MVP-018).
-#[tauri::command]
-pub async fn debug_enqueue(
-    store: State<'_, Arc<Store>>,
-    executor: State<'_, Arc<Executor>>,
-    file: String,
-    model_id: String,
-) -> Result<JobDto, String> {
-    let entry = find(&model_id).ok_or("Такой модели нет в каталоге.")?;
-    let models_dir = store.files.layout().models_dir();
-    if !is_installed(entry, &models_dir) {
-        return Err("Модель не установлена: установите её на экране «Модели».".into());
-    }
-    let src = PathBuf::from(&file);
-    if !src.is_file() {
-        return Err("Файл не найден.".into());
-    }
-    let ext = src
-        .extension()
-        .and_then(|e| e.to_str())
-        .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric()))
-        .unwrap_or("bin");
-    let audio_name = format!("source.{ext}");
-    let name = src
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "запись".into());
-
-    let store = Arc::clone(&store);
-    let job = tauri::async_runtime::spawn_blocking(move || -> Result<Job, String> {
-        let job = {
-            let conn = store.db.conn();
-            jobs::insert(
-                &conn,
-                &NewJob {
-                    source_name: name,
-                    audio_path: Some(audio_name.clone()),
-                    duration_ms: None,
-                    model_id: Some(model_id),
-                },
-            )
-            .map_err(|e| user_error(&e))?
-        };
-        if let Err(e) = store.files.copy_audio(&job.id, &src, &audio_name) {
-            let _ = store.delete_job(&job.id);
-            return Err(user_error(&e));
-        }
-        Ok(job)
-    })
-    .await
-    .map_err(|_| "Внутренняя ошибка при постановке в очередь.".to_string())??;
-    executor.notify();
-    Ok(job.into())
 }

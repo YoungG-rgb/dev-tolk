@@ -104,14 +104,19 @@ pub(crate) fn from_row(row: &Row<'_>) -> rusqlite::Result<(Job, String)> {
 
 /// Создаёт задание в статусе QUEUED.
 pub fn insert(conn: &Connection, new: &NewJob) -> Result<Job> {
-    let id = uuid::Uuid::new_v4().to_string();
+    insert_with_id(conn, &uuid::Uuid::new_v4().to_string(), new)
+}
+
+/// То же с заранее известным идентификатором: импорт сначала кладёт файлы в `jobs/<id>/`, и только
+/// потом создаёт запись, чтобы исполнитель не взял задание без аудио.
+pub fn insert_with_id(conn: &Connection, id: &str, new: &NewJob) -> Result<Job> {
     let now = now_ms();
     conn.execute(
         "INSERT INTO jobs (id, source_name, audio_path, duration_ms, model_id, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
         rusqlite::params![id, new.source_name, new.audio_path, new.duration_ms, new.model_id, now],
     )?;
-    get(conn, &id)?.ok_or(StoreError::Db(rusqlite::Error::QueryReturnedNoRows))
+    get(conn, id)?.ok_or(StoreError::Db(rusqlite::Error::QueryReturnedNoRows))
 }
 
 pub fn get(conn: &Connection, id: &str) -> Result<Option<Job>> {
@@ -128,6 +133,23 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<Job>> {
             Ok(job)
         })
         .transpose()
+}
+
+/// Статус самого свежего задания с тем же именем исходного файла и той же длительностью (для
+/// предупреждения «уже добавлено»). Файлы не сравниваются: имя и длительность — признак, а не доказательство.
+pub fn find_similar(
+    conn: &Connection,
+    source_name: &str,
+    duration_ms: Option<i64>,
+) -> Result<Option<JobStatus>> {
+    let status: Option<String> = conn
+        .query_row(
+            "SELECT status FROM jobs WHERE source_name = ?1 AND duration_ms IS ?2 ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            rusqlite::params![source_name, duration_ms],
+            |r| r.get(0),
+        )
+        .optional()?;
+    status.map(|s| s.parse()).transpose()
 }
 
 /// Все задания, новые сверху.

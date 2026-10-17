@@ -77,6 +77,29 @@ def show(title, log):
         print(json.dumps(e, ensure_ascii=False))
 
 
+def import_scenario(app, models, model, tmp):
+    fixtures = HERE.parent.parent / "crates/engine/tests/fixtures"
+    bad = tmp / "заметка.mp3"
+    bad.write_text("это не звук, просто текст")
+    subs = {
+        "@MODEL@": model,
+        "@MP3@": str(fixtures / "mp3_44k.mp3"),
+        "@VIDEO@": str(fixtures / "video_aac.mp4"),
+        "@BAD@": str(bad),
+        "@NOAUDIO@": str(fixtures / "video_noaudio.mp4"),
+        "@MISSING@": str(tmp / "нет такого файла.mp3"),
+    }
+    data = tmp / "data-import"
+    (data / "models").mkdir(parents=True)
+    for f in Path(models).glob("ggml-*.bin"):
+        (data / "models" / f.name).symlink_to(f)
+    log = tmp / "import.log"
+    proc = launch(app, prepare("import.js", subs, tmp, "0"), log, data)
+    wait_step(log, "I-done", 300)
+    proc.kill()
+    show("импорт", log)
+
+
 def main():
     app, models, f1, f2, f3, long_ = sys.argv[1:7]
     model = sys.argv[7] if len(sys.argv) > 7 else "large-v3-turbo-q5_0"
@@ -89,6 +112,7 @@ def main():
         (data / "models").mkdir(parents=True)
         for f in Path(models).glob("ggml-*.bin"):
             (data / "models" / f.name).symlink_to(f)
+        import_scenario(app, models, model, tmp)
         w = Watcher()
         w.start()
 
