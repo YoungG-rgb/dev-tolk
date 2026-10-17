@@ -8,6 +8,7 @@ pub mod files;
 pub mod glossary;
 pub mod jobs;
 pub mod layout;
+pub mod models;
 pub mod queue;
 pub mod store;
 pub mod transcript;

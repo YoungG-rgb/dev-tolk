@@ -3,7 +3,7 @@
 
 Ничего не скачивается без явного указания: без --yes скрипт только показывает, что и откуда будет загружено.
 
-  python3 bench/fetch_models.py --list
+  python3 bench/fetch_models.py --list      # каталог: crates/core/catalog/models.json
   python3 bench/fetch_models.py large-v3-turbo-q5_0 silero-vad-v6.2.0          # показать план
   python3 bench/fetch_models.py large-v3-turbo-q5_0 silero-vad-v6.2.0 --yes    # загрузить
 
@@ -22,11 +22,12 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+CATALOG = HERE.parent / "crates" / "core" / "catalog" / "models.json"
 DEFAULT_DIR = Path(os.environ.get("TOLK_BENCH_MODELS", HERE.parent.parent / "dev-tolk-tools" / "models"))
 
 
 def load_manifest() -> dict[str, dict]:
-    return {m["id"]: m for m in json.loads((HERE / "models.json").read_text(encoding="utf-8"))["models"]}
+    return {m["id"]: m for m in json.loads(CATALOG.read_text(encoding="utf-8"))["models"]}
 
 
 def sha256_file(path: Path) -> str:
