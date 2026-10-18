@@ -373,7 +373,14 @@ fn unreachable_host_and_closed_port_give_dns_and_connection_errors() {
         &cfg(),
     )
     .unwrap_err();
-    assert!(matches!(err, DownloadError::NoConnection), "{err:?}");
+    // На Windows отказ закрытого порта приходит не сразу (система повторяет SYN около двух секунд), поэтому
+    // при коротком таймауте соединения там получается «Timeout». Для пользователя оба исхода равнозначны:
+    // повтор и предложение импорта из файла.
+    let windows_slow_refusal = cfg!(windows) && matches!(err, DownloadError::Timeout);
+    assert!(
+        matches!(err, DownloadError::NoConnection) || windows_slow_refusal,
+        "{err:?}"
+    );
     assert!(err.suggest_import() && err.is_retryable());
 }
 
