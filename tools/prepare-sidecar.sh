@@ -9,7 +9,7 @@ ext=""
 case "$triple" in *windows*) ext=".exe" ;; esac
 cargo build --release -p tolk-engine
 mkdir -p app/src-tauri/binaries
-cp "target/release/tolk-engine${ext}" "app/src-tauri/binaries/tolk-engine-${triple}${ext}"
+cp "${CARGO_TARGET_DIR:-target}/release/tolk-engine${ext}" "app/src-tauri/binaries/tolk-engine-${triple}${ext}"
 echo "сайдкар: app/src-tauri/binaries/tolk-engine-${triple}${ext}"
 
 # Модель определения речи (Silero VAD, ~1 МБ) кладётся в ресурсы приложения: устанавливается из .app без сети.
