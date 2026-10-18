@@ -48,7 +48,7 @@ jobs:
       - run: cargo clippy -p tolk-engine -p tolk-core --all-targets -- -D warnings
       - run: cargo build -p tolk-engine --release
       # Тесты с настоящими моделями и `say` пропускаются сами: моделей на CI нет.
-      - run: cargo test -p tolk-engine -p tolk-core
+      - run: cargo test -p tolk-engine -p tolk-core --no-fail-fast
 
   # Тесты движка и очереди с настоящей моделью (small-q5_1, 181 МБ) и моделью определения речи. Модели
   # кэшируются по хэшу каталога. Не проверялся на CI ни разу (локально те же тесты проходят с этими моделями):
@@ -93,7 +93,7 @@ jobs:
           PY
       # На виртуальных машинах macOS «Apple Paravirtual device» принимается за GPU и работает на порядки медленнее
       # CPU (первый прогон: тесты с настоящим движком шли 691 с и упирались в таймаут), поэтому CPU.
-      - run: cargo test -p tolk-engine -p tolk-core
+      - run: cargo test -p tolk-engine -p tolk-core --no-fail-fast
         env:
           TOLK_TEST_MODELS: ${{ runner.temp }}/models
           TOLK_NO_GPU: "1"

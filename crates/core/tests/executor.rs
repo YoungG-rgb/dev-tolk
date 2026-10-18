@@ -18,6 +18,8 @@ use tolk_core::store::Store;
 use tolk_core::{metrics, StoreError};
 
 const MODEL: &str = "small-q5_1";
+#[cfg(target_os = "macos")]
+const PHRASE: &str = "Добрый день, коллеги. Сегодня мы обсудим план работ на следующий квартал. ";
 
 struct Env {
     _dir: tempfile::TempDir,
@@ -423,18 +425,23 @@ fn real_engine_completes_a_job_and_cancels_another() {
         fs::remove_file(&dest).unwrap();
         std::os::unix::fs::symlink(src, dest).unwrap();
     }
-    let phrase = env.root.join("phrase.aiff");
-    let text =
-        "Добрый день, коллеги. Сегодня мы обсудим план работ на следующий квартал. ".repeat(6);
-    let status = std::process::Command::new("/usr/bin/say")
-        .args(["-v", "Milena", "-o"])
-        .arg(&phrase)
-        .arg(&text)
-        .status();
-    if !status.is_ok_and(|s| s.success()) {
+    // Короткая запись для завершения (на CPU виртуальной машины CI 40 секунд звука не укладывались в две
+    // минуты) и длинная для отмены: её не нужно распознавать до конца.
+    let synth = |name: &str, copies: usize| -> Option<PathBuf> {
+        let out = env.root.join(name);
+        let status = std::process::Command::new("/usr/bin/say")
+            .args(["-v", "Milena", "-o"])
+            .arg(&out)
+            .arg(PHRASE.repeat(copies))
+            .status();
+        status.is_ok_and(|s| s.success()).then_some(out)
+    };
+    let phrase = synth("phrase.aiff", 1);
+    let long_phrase = synth("long.aiff", 6);
+    let (Some(phrase), Some(long_phrase)) = (phrase, long_phrase) else {
         eprintln!("ПРОПУЩЕН: нет голоса Milena для say");
         return;
-    }
+    };
 
     let job = env.add_job("речь.aiff", Some(MODEL));
     fs::copy(
@@ -444,7 +451,7 @@ fn real_engine_completes_a_job_and_cancels_another() {
     .unwrap();
     let ex = env.executor(&engine);
     let handle = ex.spawn();
-    env.wait_status(&job.id, JobStatus::Completed, Duration::from_secs(120));
+    env.wait_status(&job.id, JobStatus::Completed, Duration::from_secs(300));
     let bytes = env
         .store
         .files
@@ -464,7 +471,7 @@ fn real_engine_completes_a_job_and_cancels_another() {
     // Отмена настоящего движка за ≤ 2 с.
     let second = env.add_job("ещё.aiff", Some(MODEL));
     fs::copy(
-        &phrase,
+        &long_phrase,
         env.store
             .files
             .layout()
@@ -472,7 +479,7 @@ fn real_engine_completes_a_job_and_cancels_another() {
             .join("source.wav"),
     )
     .unwrap();
-    env.wait_status(&second.id, JobStatus::Processing, WAIT);
+    env.wait_status(&second.id, JobStatus::Processing, Duration::from_secs(60));
     let t0 = Instant::now();
     ex.cancel_job(&second.id).unwrap();
     // Задание могло успеть завершиться (короткая запись): тогда отмена ничего не меняет.

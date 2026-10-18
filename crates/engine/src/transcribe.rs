@@ -26,7 +26,11 @@ pub const FORMAT_VERSION: u32 = 1;
 pub const ENGINE_NAME: &str = "whisper.cpp 1.8.3 (whisper-rs 0.16)";
 /// Доля шкалы прогресса, отведённая на декодирование (остальное — распознавание).
 const DECODE_SHARE: u32 = 4;
-const DEFAULT_THREADS: usize = 4;
+/// Потоков по умолчанию: не больше 4 (как в whisper.cpp) и не больше числа ядер. Больше потоков, чем ядер
+/// (виртуальные машины CI с 3 ядрами), заметно замедляет декодирование: потоки ggml ждут друг друга активно.
+fn default_threads() -> usize {
+    std::thread::available_parallelism().map_or(4, |n| n.get().min(4))
+}
 
 #[derive(Debug, Clone)]
 pub struct Args {
@@ -210,7 +214,7 @@ pub fn run(args: &Args) -> Result<Outcome> {
         patience: -1.0,
     });
     params.set_language(Some(&args.language));
-    params.set_n_threads(args.threads.unwrap_or(DEFAULT_THREADS).max(1) as i32);
+    params.set_n_threads(args.threads.unwrap_or_else(default_threads).max(1) as i32);
     params.set_n_max_text_ctx(0); // как `-mc 0`: без контекста между окнами, меньше зацикливаний
     params.set_print_progress(false);
     params.set_print_realtime(false);

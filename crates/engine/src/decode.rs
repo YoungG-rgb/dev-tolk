@@ -122,6 +122,14 @@ fn map_sym_error(err: SymError) -> EngineError {
 
 /// Открывает файл и выбирает аудиодорожку. Декодирование не начинается.
 pub fn open(path: &Path) -> Result<Source> {
+    // На Windows File::open на каталоге даёт PermissionDenied, а не «не файл»,
+    // поэтому каталог отсеиваем до открытия.
+    if std::fs::metadata(path).is_ok_and(|m| m.is_dir()) {
+        return Err(EngineError::new(
+            ErrorCode::CorruptFile,
+            "Указанный путь не является файлом",
+        ));
+    }
     let file = File::open(path).map_err(|e| EngineError::from_input_io(&e))?;
     let meta = file
         .metadata()
