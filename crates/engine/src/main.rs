@@ -106,7 +106,9 @@ fn parse_transcribe_args(args: &[OsString]) -> Result<transcribe::Args> {
     let (mut model, mut vad, mut input, mut output) = (None, None, None, None);
     let mut language = "ru".to_string();
     let mut threads = None;
-    let mut no_gpu = false;
+    // Переменная окружения TOLK_NO_GPU=1 равна флагу `--no-gpu`: диагностический переключатель для
+    // компьютеров и виртуальных машин, где драйвер GPU работает неверно или очень медленно.
+    let mut no_gpu = std::env::var_os("TOLK_NO_GPU").is_some_and(|v| v != "0" && !v.is_empty());
     let mut exit_on_stdin_close = false;
     let mut it = args.iter();
     while let Some(flag) = it.next() {

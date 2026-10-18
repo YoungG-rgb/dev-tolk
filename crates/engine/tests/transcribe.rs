@@ -596,3 +596,52 @@ fn exit_on_stdin_close_flag_is_accepted_without_a_pipe() {
         r.last()
     );
 }
+
+#[test]
+fn tolk_no_gpu_environment_variable_selects_cpu_like_the_flag() {
+    let (model, vad) = require_models!();
+    let audio = require_speech!(1);
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("env.json");
+    let output = Command::new(ENGINE)
+        .env("TOLK_NO_GPU", "1")
+        .args(["transcribe", "--model"])
+        .arg(&model)
+        .arg("--vad-model")
+        .arg(&vad)
+        .arg("--input")
+        .arg(&audio)
+        .arg("--output")
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let last = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .last()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        .unwrap();
+    assert_eq!(last["backend"], "cpu");
+    // «0» и пустое значение переменную не включают: на macOS это снова Metal.
+    if cfg!(target_os = "macos") {
+        let out2 = dir.path().join("env0.json");
+        let output = Command::new(ENGINE)
+            .env("TOLK_NO_GPU", "0")
+            .args(["transcribe", "--model"])
+            .arg(&model)
+            .arg("--vad-model")
+            .arg(&vad)
+            .arg("--input")
+            .arg(&audio)
+            .arg("--output")
+            .arg(&out2)
+            .output()
+            .unwrap();
+        let last = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .last()
+            .map(|l| serde_json::from_str::<Value>(l).unwrap())
+            .unwrap();
+        assert_eq!(last["backend"], "metal");
+    }
+}
