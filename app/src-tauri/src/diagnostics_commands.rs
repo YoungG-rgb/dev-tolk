@@ -161,3 +161,9 @@ pub fn job_rate(store: State<'_, Arc<Store>>, id: String, rating: u8) -> Result<
     let conn = store.db.conn();
     metrics::set_rating(&conn, &id, rating).map_err(|e| user_error(&e))
 }
+
+/// Полный текст уведомлений о сторонних компонентах (создаётся `tools/gen-notices.py`, вшит в приложение).
+#[tauri::command]
+pub fn licenses_text() -> &'static str {
+    include_str!("../../../THIRD_PARTY_NOTICES.md")
+}

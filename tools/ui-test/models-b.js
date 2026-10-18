@@ -23,9 +23,10 @@ const segsMeta = () => text(q('.transcript .muted'));
     const btn = rowButton('small-q5_1', 'Докачать');
     await rep({ step: 'N-component-button', label: text(btn) });
     btn.click();
-    await waitFor(() => q('.download') || q('.ok'), 15000, 'download started');
+    await waitFor(() => q('.download') || q('.ok') || q('[role="alert"]'), 15000, 'download started');
     await waitFor(() => q('.ok') || q('[role="alert"]'), 90000, 'download finished');
-    await rep({ step: 'N-component-done', ok: text(q('.ok')), alert: text(q('[role="alert"]')), stillHasButton: !!rowButton('small-q5_1', 'Докачать') });
+    await rep({ step: 'N-component-done', ok: text(q('.ok')), alert: text(q('[role="alert"]')), stillHasButton: !!rowButton('small-q5_1', 'Докачать'), importOffered: !!document.querySelector('[role="alert"] button') });
+    if (q('[role="alert"]')) { await rep({ step: 'N-done' }); return; }
 
     // Основная модель.
     rowButton('small-q5_1', 'Сделать основной').click();

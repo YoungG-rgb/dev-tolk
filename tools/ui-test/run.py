@@ -56,7 +56,12 @@ def launch(app, script, log, data, extra_env=None):
     env = dict(os.environ, TOLK_UI_TEST_LOG=str(log), TOLK_UI_TEST_DATA=str(data), **(extra_env or {}))
     if script:
         env["TOLK_UI_TEST_SCRIPT"] = str(script)
-    return subprocess.Popen([str(exe)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cmd = [str(exe)]
+    if os.environ.get("TOLK_UITEST_NONET"):
+        # Полностью закрытая сеть (в том числе localhost): профиль `sandbox-exec` запрещает любые сетевые вызовы
+        # процессу приложения и его дочерним процессам (MVP-028).
+        cmd = ["sandbox-exec", "-f", os.environ["TOLK_UITEST_NONET"], str(exe)]
+    return subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def read_log(log):
@@ -125,6 +130,24 @@ def list_scenario(app, models, model, f1, tmp):
         print(f"каталогов заданий на диске перед удалением: {at_delete[-1] if at_delete else '?'}; после: {dw.samples[-1][1]}")
 
 
+class ConnWatcher(threading.Thread):
+    """Собирает удалённые адреса TCP/UDP-соединений процесса приложения (lsof, без прав администратора)."""
+
+    def __init__(self, pid):
+        super().__init__(daemon=True)
+        self.pid = pid
+        self.seen = set()
+        self.stop = False
+
+    def run(self):
+        while not self.stop:
+            out = subprocess.run(["lsof", "-nP", "-i", "-a", "-p", str(self.pid), "-F", "n"], capture_output=True, text=True).stdout
+            for line in out.splitlines():
+                if line.startswith("n") and "->" in line:
+                    self.seen.add(line[1:].split("->", 1)[1])
+            time.sleep(0.03)
+
+
 def models_scenario(app, models, f1, long_, tmp):
     # А. Чистая установка: моделей нет.
     data = new_data(tmp, "data-models-a", models, only=[])
@@ -150,7 +173,11 @@ def models_scenario(app, models, f1, long_, tmp):
     log = tmp / "models-b.log"
     # Встроенную модель определения речи отключаем: нужно проверить настоящую загрузку компонента.
     proc = launch(app, prepare("models-b.js", {"@MODEL@": "small-q5_1", "@F1@": f1, "@LONG@": long_}, tmp, "MB"), log, data, {"TOLK_UI_TEST_NO_BUNDLED_VAD": "1"})
+    conns = ConnWatcher(proc.pid)
+    conns.start()
     wait_step(log, "N-done", 400)
+    conns.stop = True
+    print("удалённые адреса соединений приложения за прогон (загрузка компонента по кнопке):", sorted(conns.seen) or "нет")
     proc.kill()
     show("экран «Модели»", log)
     print("в каталоге моделей:", sorted((p.name, "ссылка" if p.is_symlink() else f"{p.stat().st_size} Б") for p in (data / "models").iterdir()))

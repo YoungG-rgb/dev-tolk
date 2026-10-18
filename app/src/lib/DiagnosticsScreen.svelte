@@ -8,6 +8,7 @@
   let info = $state<Diagnostics | null>(null);
   let message = $state<string | null>(null);
   let saved = $state<string | null>(null);
+  let notices = $state<string | null>(null);
 
   const load = () => invoke<Diagnostics>('diagnostics_info').then((v) => (info = v));
   $effect(() => {
@@ -23,6 +24,11 @@
       message = String(e);
     }
   }
+
+  const toggleNotices = () =>
+    run(async () => {
+      notices = notices === null ? await invoke<string>('licenses_text') : null;
+    });
 
   const openLogs = () => run(() => invoke('open_logs_dir'));
   const saveReport = () =>
@@ -69,4 +75,14 @@
     {#if saved}<span class="ok" role="status">Сохранено: {saved}</span>{/if}
   </div>
   {#if message}<p class="error" role="alert">{message}</p>{/if}
+
+  <h3>О программе и лицензии</h3>
+  <p class="muted">
+    Лицензия самого dev-tolk пока не выбрана. В приложение входят открытые компоненты: Whisper (модели, MIT), whisper.cpp и ggml (MIT),
+    Silero VAD (MIT), libopus (BSD-3-Clause), symphonia (MPL-2.0), Tauri, Svelte и другие. Модели распознавания в установщик не входят: вы скачиваете их сами.
+  </p>
+  <div class="row">
+    <button onclick={toggleNotices}>{notices === null ? 'Показать лицензии и уведомления' : 'Скрыть лицензии'}</button>
+  </div>
+  {#if notices !== null}<pre class="notices" aria-label="Лицензии и уведомления">{notices}</pre>{/if}
 </section>

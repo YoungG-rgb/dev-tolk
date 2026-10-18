@@ -14,6 +14,8 @@
 | [docs/ENGINE_PROTOCOL.md](docs/ENGINE_PROTOCOL.md) | протокол `tolk-engine` (JSON Lines) |
 | [docs/BENCHMARK_PLAN.md](docs/BENCHMARK_PLAN.md), [docs/CORPUS_REQUIREMENTS.md](docs/CORPUS_REQUIREMENTS.md) | бенчмарк и требования к тестовому корпусу |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | инструкция для сотрудников |
+| [docs/PRIVACY_CHECK.md](docs/PRIVACY_CHECK.md) | аудит сетевых обращений и офлайн-режима |
+| [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | лицензии сторонних компонентов (создаётся `tools/gen-notices.py`) |
 
 ## Структура
 

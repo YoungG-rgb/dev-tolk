@@ -23,6 +23,10 @@ const tab = (name) => [...document.querySelectorAll('.tabs button')].find((b) =>
     buttons().find((b) => b.textContent.includes('Сохранить отчёт')).click();
     await waitFor(() => q('.diagnostics .ok') || q('.diagnostics [role="alert"]'), 10000, 'report');
     await rep({ step: 'D-report', ok: text(q('.diagnostics .ok')), alert: text(q('.diagnostics [role="alert"]')) ?? null });
+    buttons().find((b) => b.textContent.includes('Показать лицензии')).click();
+    await waitFor(() => q('.diagnostics .notices'), 5000, 'notices');
+    const t = q('.diagnostics .notices').textContent;
+    await rep({ step: 'D-licenses', chars: t.length, symphonia: t.includes('symphonia') && t.includes('MPL-2.0'), whisper: t.includes('whisper.cpp'), opus: t.includes('libopus'), silero: t.includes('Silero'), tauri: t.includes('tauri') });
     await rep({ step: 'D-done' });
   } catch (e) {
     await rep({ step: 'error', message: String(e) });
