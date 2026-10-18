@@ -167,7 +167,7 @@
   {:else}
     <header>
       <div>
-        <h1>dev-tolk</h1>
+        <h1>DEV ToLK</h1>
         <p class="muted">Расшифровка записей на этом компьютере, без интернета.</p>
       </div>
       {#if view === 'jobs'}<button class="primary" onclick={pick}>Добавить файлы…</button>{/if}

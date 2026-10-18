@@ -350,6 +350,9 @@ fn ensure_space_refuses_absurd_sizes_and_accepts_small_ones() {
         tolk_core::disk::ensure_space(dir.path(), u64::MAX / 2),
         Err(StoreError::NoSpace)
     ));
+    // На Windows свободное место считается и для ещё не созданного пути внутри существующего тома,
+    // поэтому «не удалось узнать» там проверить нечем.
+    #[cfg(not(windows))]
     assert!(
         tolk_core::disk::ensure_space(&dir.path().join("нет каталога"), u64::MAX / 2).is_ok(),
         "не удалось узнать — не блокируем"

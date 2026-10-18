@@ -152,7 +152,7 @@ jobs:
         run: npx tauri build --bundles ${{ matrix.bundles }}
       - name: Упаковка .app (сохраняет права и подпись)
         if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent target/release/bundle/macos/dev-tolk.app dev-tolk-macos.zip
+        run: ditto -c -k --keepParent "target/release/bundle/macos/DEV ToLK.app" dev-tolk-macos.zip
       - uses: actions/upload-artifact@v4
         with:
           name: tolk-app-${{ matrix.os }}

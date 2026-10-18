@@ -404,8 +404,13 @@ fn real_engine_transcribes_and_reports_events_through_the_runner() {
         },
     )
     .unwrap();
+    // В CI (виртуальные машины macOS) GPU отключён переменной TOLK_NO_GPU, и движок честно сообщает «cpu».
+    let expected_backend = match std::env::var("TOLK_NO_GPU") {
+        Ok(v) if !v.is_empty() && v != "0" => "cpu",
+        _ => "metal",
+    };
     assert!(
-        matches!(&result, RunResult::Done(d) if d.segments == segments && d.backend == "metal"),
+        matches!(&result, RunResult::Done(d) if d.segments == segments && d.backend == expected_backend),
         "{result:?}"
     );
     assert!(percents.windows(2).all(|w| w[0] <= w[1]) && percents.last() == Some(&100));
