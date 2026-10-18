@@ -51,9 +51,9 @@ def prepare(script_name, subs, tmp, tag):
     return path
 
 
-def launch(app, script, log, data):
+def launch(app, script, log, data, extra_env=None):
     exe = Path(app) / "Contents/MacOS/tolk-app"
-    env = dict(os.environ, TOLK_UI_TEST_LOG=str(log), TOLK_UI_TEST_DATA=str(data))
+    env = dict(os.environ, TOLK_UI_TEST_LOG=str(log), TOLK_UI_TEST_DATA=str(data), **(extra_env or {}))
     if script:
         env["TOLK_UI_TEST_SCRIPT"] = str(script)
     return subprocess.Popen([str(exe)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -194,6 +194,41 @@ def seed_transcript_job(data, con, name, segments):
     return job_id
 
 
+def export_scenario(app, models, model, tmp):
+    import sqlite3
+    import zipfile
+
+    data = new_data(tmp, "data-export", models)
+    init_db(app, data, tmp)
+    con = sqlite3.connect(data / "tolk.db")
+    with con:
+        seed_transcript_job(data, con, "small.mp3", 5)
+        seed_transcript_job(data, con, "small2.mp3", 5)
+    con.close()
+    out = tmp / "экспорт"
+    out.mkdir()
+    log = tmp / "export.log"
+    proc = launch(app, prepare("export.js", {"@MODEL@": model}, tmp, "X"), log, data, {"TOLK_UI_TEST_EXPORT_DIR": str(out)})
+    wait_step(log, "X-done", 90)
+    proc.kill()
+    show("экспорт в DOCX", log)
+    print("файлы в каталоге экспорта:", sorted(p.name for p in out.iterdir()))
+
+    def document_xml(path):
+        return zipfile.ZipFile(path).read("word/document.xml").decode("utf-8")
+
+    plain, timed = out / "small.docx", out / "small2.docx"
+    if plain.exists():
+        x = document_xml(plain)
+        print("small.docx: правка перед экспортом внутри:", "Правка прямо перед экспортом." in x, "| таймкодов нет:", "[00:00:00]" not in x)
+        if sys.platform == "darwin":
+            txt = subprocess.run(["textutil", "-convert", "txt", "-stdout", str(plain)], capture_output=True, text=True).stdout
+            print("textutil (независимый разбор) читает документ, строк:", len(txt.splitlines()), "| заголовок:", txt.splitlines()[0] if txt else "?")
+    if timed.exists():
+        x = document_xml(timed)
+        print("small2.docx: таймкоды внутри:", "[00:00:00]" in x)
+
+
 def edit_scenario(app, models, model, tmp):
     import sqlite3
 
@@ -325,6 +360,7 @@ def main():
         list_scenario(app, models, model, f1, tmp)
         bulk_scenario(app, models, model, tmp)
         edit_scenario(app, models, model, tmp)
+        export_scenario(app, models, model, tmp)
         models_scenario(app, models, f1, long_, tmp)
         w = Watcher()
         w.start()

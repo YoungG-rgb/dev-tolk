@@ -222,3 +222,65 @@ fn long_transcript_of_two_thousand_segments_saves_quickly() {
     );
     assert!(t0.elapsed() < std::time::Duration::from_secs(1));
 }
+
+fn docx_text(path: &std::path::Path) -> String {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
+    let mut xml = String::new();
+    zip.by_name("word/document.xml")
+        .unwrap()
+        .read_to_string(&mut xml)
+        .unwrap();
+    xml
+}
+
+#[test]
+fn export_contains_the_edited_text_not_the_original() {
+    use tolk_core::editing::{default_export_name, export_docx};
+    let (dir, store, id) = setup(3);
+    let mut t = texts(&store, &id);
+    t[1] = "Текст после правки пользователем.".into();
+    save_texts(&store, &id, &t).unwrap();
+
+    let plain = dir.path().join("без времени.docx");
+    let timed = dir.path().join("со временем.docx");
+    export_docx(&store, &id, false, "18.10.2026", &plain).unwrap();
+    export_docx(&store, &id, true, "18.10.2026", &timed).unwrap();
+    let (a, b) = (docx_text(&plain), docx_text(&timed));
+    for xml in [&a, &b] {
+        assert!(xml.contains("Текст после правки пользователем."));
+        assert!(
+            !xml.contains("Сегмент номер 1."),
+            "исходный текст правленого сегмента в документ не попадает"
+        );
+        assert!(xml.contains("Сегмент номер 0."));
+    }
+    assert!(!a.contains("[00:00:00]"));
+    assert!(b.contains("[00:00:00]"));
+    assert_eq!(default_export_name(&store, &id).unwrap(), "встреча.docx");
+}
+
+#[test]
+fn export_requires_a_completed_job_and_does_not_leave_partial_files() {
+    use tolk_core::editing::export_docx;
+    let (dir, store, _) = setup(1);
+    let queued = jobs::insert(
+        &store.db.conn(),
+        &NewJob {
+            source_name: "в очереди".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let dest = dir.path().join("x.docx");
+    assert!(matches!(
+        export_docx(&store, &queued.id, false, "", &dest),
+        Err(StoreError::InvalidInput(_))
+    ));
+    assert!(!dest.exists());
+    // Каталога назначения нет: ошибка, и ни файла, ни временных остатков.
+    let (_d2, store2, id2) = setup(1);
+    let missing = dir.path().join("нет такой папки").join("x.docx");
+    assert!(export_docx(&store2, &id2, false, "", &missing).is_err());
+    assert!(!missing.exists());
+}

@@ -3,7 +3,7 @@
   import { clock } from './format';
   import type { TranscriptData } from './types';
 
-  let { id, data, onBack }: { id: string; data: TranscriptData; onBack: () => void } = $props();
+  let { id, data, date, onBack }: { id: string; data: TranscriptData; date: string; onBack: () => void } = $props();
 
   /** Сколько ждать после последней правки перед автосохранением. */
   const AUTOSAVE_MS = 1500;
@@ -17,6 +17,9 @@
   let status = $state<'saved' | 'dirty' | 'saving' | 'error'>('saved');
   let error = $state<string | null>(null);
   let confirmingRevert = $state(false);
+  let exportTimes = $state(false);
+  let exporting = $state(false);
+  let exported = $state<string | null>(null);
   // Версия правок и версия, записанная на диск: расхождение означает несохранённые изменения.
   let version = $state(0);
   let savedVersion = $state(0);
@@ -53,6 +56,22 @@
       error = String(e);
       status = 'error';
       return false;
+    }
+  }
+
+  /** Экспорт текущей версии в DOCX: сначала сохраняются правки, затем открывается диалог сохранения. */
+  async function exportDocx() {
+    exported = null;
+    if (!(await save())) return;
+    exporting = true;
+    try {
+      const name = await invoke<string | null>('transcript_export', { id, timestamps: exportTimes, date });
+      if (name) exported = name;
+      error = null;
+    } catch (e) {
+      error = String(e);
+    } finally {
+      exporting = false;
     }
   }
 
@@ -117,6 +136,11 @@
     {:else}
       <button onclick={() => (confirmingRevert = true)} disabled={!hasEdits && !dirty}>Вернуть исходный текст</button>
     {/if}
+  </div>
+  <div class="toolbar export">
+    <button onclick={exportDocx} disabled={exporting || status === 'saving'}>Экспорт в DOCX…</button>
+    <label><input type="checkbox" bind:checked={exportTimes} /> Время в документе</label>
+    {#if exported}<span class="ok" role="status">Сохранено: {exported}</span>{/if}
   </div>
   {#if error}
     <p class="error" role="alert">

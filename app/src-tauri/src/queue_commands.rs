@@ -312,3 +312,65 @@ pub fn defer_close_for_unsaved(
     });
     true
 }
+
+/// Экспорт текущей версии расшифровки в DOCX. Диалог сохранения открывается из Rust; `Ok(None)` — пользователь
+/// передумал. Интерфейс перед вызовом сохраняет правки, поэтому в документ попадает то, что на экране.
+#[tauri::command]
+pub async fn transcript_export(
+    app: tauri::AppHandle,
+    store: State<'_, Arc<Store>>,
+    id: String,
+    timestamps: bool,
+    date: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let name = editing::default_export_name(&store, &id).map_err(|e| user_error(&e))?;
+    #[cfg(feature = "ui-test")]
+    let forced = std::env::var_os("TOLK_UI_TEST_EXPORT_DIR")
+        .map(|dir| std::path::PathBuf::from(dir).join(&name));
+    #[cfg(not(feature = "ui-test"))]
+    let forced: Option<std::path::PathBuf> = None;
+
+    let dest = match forced {
+        Some(path) => path,
+        None => {
+            let dialog_name = name.clone();
+            let picked = tauri::async_runtime::spawn_blocking(move || {
+                app.dialog()
+                    .file()
+                    .set_title("Сохранить документ")
+                    .set_file_name(dialog_name)
+                    .add_filter("Документ Word (*.docx)", &["docx"])
+                    .blocking_save_file()
+            })
+            .await
+            .map_err(|_| "Не удалось открыть окно сохранения.".to_string())?;
+            let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
+                return Ok(None);
+            };
+            if path
+                .extension()
+                .is_none_or(|e| !e.eq_ignore_ascii_case("docx"))
+            {
+                path.with_extension("docx")
+            } else {
+                path
+            }
+        }
+    };
+    let store = Arc::clone(&store);
+    let written = dest.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        editing::export_docx(&store, &id, timestamps, &date, &dest)
+    })
+    .await
+    .map_err(|_| "Внутренняя ошибка при экспорте.".to_string())?
+    .map_err(|e| user_error(&e))?;
+    Ok(Some(
+        written
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or(name),
+    ))
+}

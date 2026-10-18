@@ -16,7 +16,7 @@
   let message = $state<string | null>(null);
   let importing = $state<{ name: string; index: number; total: number; percent: number | null } | null>(null);
   let importNotes = $state<ImportNote[]>([]);
-  let transcript = $state<{ id: string; data: TranscriptData } | null>(null);
+  let transcript = $state<{ id: string; data: TranscriptData; date: string } | null>(null);
   let editor = $state<{ save: () => Promise<boolean> } | undefined>();
   let view = $state<'jobs' | 'models'>('jobs');
   let models = $state<ModelsOverview | null>(null);
@@ -140,7 +140,9 @@
   const remove = (id: string) => run(() => invoke('job_delete', { id }));
   const open = (id: string) =>
     run(async () => {
-      transcript = { id, data: await invoke<TranscriptData>('transcript_load', { id }) };
+      const job = jobs.find((j) => j.id === id);
+      const date = new Date(job?.finishedAt ?? job?.createdAt ?? Date.now()).toLocaleDateString('ru-RU');
+      transcript = { id, data: await invoke<TranscriptData>('transcript_load', { id }), date };
     });
 
   // Закрытие окна при несохранённых правках: приложение просит сохранить и ждёт подтверждения.
@@ -154,7 +156,7 @@
 <main data-batches={batches}>
   {#if transcript}
     {#key transcript.id}
-      <TranscriptEditor bind:this={editor} id={transcript.id} data={transcript.data} onBack={() => {
+      <TranscriptEditor bind:this={editor} id={transcript.id} data={transcript.data} date={transcript.date} onBack={() => {
           transcript = null;
           void refresh(); // в списке появляется отметка «есть правки»
         }} />

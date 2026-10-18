@@ -183,6 +183,12 @@ progress {
   margin-bottom: 0.75rem;
 }
 
+.transcript .toolbar.export {
+  position: static;
+  border-bottom: none;
+  padding-top: 0;
+}
+
 .transcript .toolbar {
   display: flex;
   align-items: center;

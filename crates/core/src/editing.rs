@@ -118,3 +118,28 @@ pub fn revert(store: &Store, id: &str) -> Result<EditView> {
     jobs::set_has_edits(&store.db.conn(), id, false)?;
     Ok(view(job, original, false))
 }
+
+/// Имя файла для экспорта по умолчанию (из имени записи).
+pub fn default_export_name(store: &Store, id: &str) -> Result<String> {
+    let job = completed_job(&store.db.conn(), id)?;
+    Ok(crate::export::default_file_name(&job.source_name))
+}
+
+/// Экспортирует **текущую** (отредактированную) версию в DOCX. Несохранённые правки редактора сюда
+/// не попадают: интерфейс сначала сохраняет их.
+pub fn export_docx(
+    store: &Store,
+    id: &str,
+    timestamps: bool,
+    date: &str,
+    dest: &std::path::Path,
+) -> Result<()> {
+    let job = completed_job(&store.db.conn(), id)?;
+    let transcript = read_working(store, id)?;
+    let options = crate::export::ExportOptions {
+        title: job.source_name,
+        date: date.to_string(),
+        timestamps,
+    };
+    crate::export::export_to_file(&transcript, &options, dest)
+}
