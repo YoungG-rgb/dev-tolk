@@ -1,6 +1,9 @@
+#[cfg(target_os = "macos")]
 use tolk_core::db::Db;
+#[cfg(target_os = "macos")]
 use tolk_core::jobs::{self, NewJob};
 use tolk_core::power::{SleepGuard, SleepInhibitor};
+#[cfg(target_os = "macos")]
 use tolk_core::queue;
 
 /// Тесты проверяют запрет сна всего процесса, поэтому выполняются по одному.

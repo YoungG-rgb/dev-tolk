@@ -58,6 +58,7 @@ jobs:
     name: Движок с моделью (macos-15)
     runs-on: macos-15
     continue-on-error: true
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -69,6 +70,27 @@ jobs:
       - name: Модели для тестов
         run: python3 bench/fetch_models.py small-q5_1 silero-vad-v6.2.0 --yes --dir "${{ runner.temp }}/models"
       - run: cargo build -p tolk-engine --release
+      # Диагностика: как движок ведёт себя на виртуальной машине (GPU, скорость). Вывод stderr движка в журнале.
+      - name: Движок на коротком звуке (с GPU и без)
+        continue-on-error: true
+        env:
+          MODELS: ${{ runner.temp }}/models
+        run: |
+          say -o "$RUNNER_TEMP/s.aiff" "This is a short test of speech recognition on the continuous integration runner. It has two sentences."
+          python3 - <<'PY'
+          import os, subprocess, time
+          m = os.environ["MODELS"]; t = os.environ["RUNNER_TEMP"]
+          for flag in ([], ["--no-gpu"]):
+              cmd = ["target/release/tolk-engine", "transcribe", "--model", f"{m}/ggml-small-q5_1.bin", "--vad-model", f"{m}/ggml-silero-v6.2.0.bin",
+                     "--input", f"{t}/s.aiff", "--output", f"{t}/o.json", *flag]
+              t0 = time.time()
+              try:
+                  r = subprocess.run(cmd, capture_output=True, text=True, timeout=150)
+                  print("флаги", flag, "код", r.returncode, f"{time.time() - t0:.1f} с")
+                  print(r.stdout[-600:]); print(r.stderr[-1500:])
+              except subprocess.TimeoutExpired as e:
+                  print("флаги", flag, "ТАЙМАУТ 150 с"); print((e.stderr or b"")[-1500:])
+          PY
       - run: cargo test -p tolk-engine -p tolk-core
         env:
           TOLK_TEST_MODELS: ${{ runner.temp }}/models
@@ -102,6 +124,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: echo "LIBCLANG_PATH=C:\\Program Files\\LLVM\\bin" >> "$GITHUB_ENV"
+      # В package-lock.json должны быть только публичные адреса пакетов. Первый прогон CI упал на `npm ci`
+      # («Exit handler never called»): адреса указывали на корпоративный реестр, недоступный с GitHub.
+      # npm подставляет настроенный реестр вместо registry.npmjs.org сам (`replace-registry-host`).
+      - name: Проверка адресов пакетов в package-lock.json
+        shell: bash
+        run: |
+          bad="$(grep -o '"resolved": "https\?://[^/]*' app/package-lock.json | grep -v 'registry.npmjs.org' || true)"
+          if [ -n "$bad" ]; then echo "Адреса не из registry.npmjs.org:"; echo "$bad" | sort | uniq -c; exit 1; fi
       - name: Зависимости и проверка фронтенда
         working-directory: app
         run: |

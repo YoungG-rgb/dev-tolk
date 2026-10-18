@@ -1,11 +1,14 @@
+// Часть импортов нужна только тестам с фиктивными процессами и речью `say` (Unix, macOS).
+#[cfg(unix)]
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use tolk_core::download::CancelToken;
-use tolk_core::engine::{
-    parse_line, run_transcribe, EngineEvent, RunResult, TranscribeArgs, KILL_AFTER,
-};
+#[cfg(unix)]
+use tolk_core::engine::KILL_AFTER;
+use tolk_core::engine::{parse_line, run_transcribe, EngineEvent, RunResult, TranscribeArgs};
 
 fn args(dir: &Path) -> TranscribeArgs {
     TranscribeArgs {
@@ -325,6 +328,7 @@ fn real_engine() -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
+#[cfg(target_os = "macos")]
 fn models() -> Option<(PathBuf, PathBuf)> {
     let dir = std::env::var_os("TOLK_TEST_MODELS")
         .map(PathBuf::from)

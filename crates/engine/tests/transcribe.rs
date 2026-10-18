@@ -3,9 +3,12 @@
 //! и пропускаются с пометкой, если моделей нет. Речь для них синтезирует `say` (macOS).
 
 use std::fs;
+#[cfg(unix)]
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(unix)]
+use std::process::Stdio;
 use std::sync::OnceLock;
 
 use serde_json::Value;

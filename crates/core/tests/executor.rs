@@ -97,11 +97,24 @@ impl Env {
             if job.status == status {
                 return job;
             }
-            assert!(
-                t0.elapsed() < timeout,
-                "ждали {status:?}, статус {:?}",
-                job.status
-            );
+            if t0.elapsed() >= timeout {
+                let log = self.root.join("data").join("logs").join("engine.log");
+                let tail: String = fs::read_to_string(&log)
+                    .map(|t| {
+                        t.chars()
+                            .rev()
+                            .take(1500)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                panic!(
+                    "ждали {status:?}, статус {:?}; хвост журнала движка:\n{tail}",
+                    job.status
+                );
+            }
             std::thread::sleep(Duration::from_millis(20));
         }
     }
