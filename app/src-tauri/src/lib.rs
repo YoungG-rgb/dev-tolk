@@ -2,6 +2,7 @@
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
 mod import_commands;
+mod models_commands;
 mod queue_commands;
 #[cfg(feature = "ui-test")]
 mod ui_test;
@@ -86,6 +87,12 @@ macro_rules! handlers {
             queue_commands::editor_set_dirty,
             queue_commands::editor_ack_flush,
             queue_commands::editor_close_now,
+            models_commands::models_overview,
+            models_commands::model_set_default,
+            models_commands::model_delete,
+            models_commands::model_download,
+            models_commands::model_task_cancel,
+            models_commands::model_import_pick,
             import_commands::import_pick,
             import_commands::import_cancel
         ]
@@ -109,9 +116,16 @@ macro_rules! handlers {
             queue_commands::editor_set_dirty,
             queue_commands::editor_ack_flush,
             queue_commands::editor_close_now,
+            models_commands::models_overview,
+            models_commands::model_set_default,
+            models_commands::model_delete,
+            models_commands::model_download,
+            models_commands::model_task_cancel,
+            models_commands::model_import_pick,
             import_commands::import_pick,
             import_commands::import_cancel,
             import_commands::import_paths,
+            models_commands::model_import_path,
             ui_test::ui_test_set_default_model,
             ui_test::ui_test_report,
             ui_test::ui_test_close
@@ -178,6 +192,7 @@ pub fn run() {
             app.manage(subscribers);
             app.manage(Arc::new(queue_commands::EditorState::default()));
             app.manage(import_commands::ImportState::default());
+            app.manage(Arc::new(models_commands::ModelTask::default()));
             app.manage(executor);
 
             log::info!(

@@ -26,6 +26,7 @@ pub enum AppEvent {
     Job(JobEvent),
     Import(ImportEvent),
     Request(EditorRequest),
+    Model(crate::models_commands::ModelEvent),
 }
 
 /// Запросы приложения к странице.

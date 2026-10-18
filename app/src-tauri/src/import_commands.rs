@@ -52,6 +52,17 @@ pub fn start_import(app: &AppHandle, paths: Vec<PathBuf>) {
             .ok()
             .flatten();
         let sink = Arc::clone(&subscribers);
+        // Предупреждения перед обработкой: запуск при этом не блокируется.
+        match model_id.as_deref().and_then(tolk_core::models::find) {
+            None => sink.publish(AppEvent::Import(ImportEvent::ImportNotice {
+                message: "Модель распознавания не установлена. Записи будут добавлены, а обработка начнётся после установки модели на вкладке «Модели» (затем нажмите «Повторить»).".into(),
+            })),
+            Some(entry) => {
+                if let Some(message) = crate::models_commands::memory_text(entry, &tolk_core::models::SystemInfo::detect()) {
+                    sink.publish(AppEvent::Import(ImportEvent::ImportNotice { message }));
+                }
+            }
+        }
         import::import_many(
             &store,
             &exe,

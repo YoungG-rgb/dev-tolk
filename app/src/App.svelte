@@ -1,9 +1,10 @@
 <script lang="ts">
   import { Channel, invoke } from '@tauri-apps/api/core';
   import JobItem from './lib/JobItem.svelte';
+  import ModelsScreen from './lib/ModelsScreen.svelte';
   import TranscriptEditor from './lib/TranscriptEditor.svelte';
   import { sortJobs } from './lib/format';
-  import type { AppEvent, Job, TranscriptData } from './lib/types';
+  import type { AppEvent, DownloadProgress, Job, ModelsOverview, TaskResult, TranscriptData } from './lib/types';
 
   type AppInfo = { version: string; platform: string; arch: string; dataDir: string; logDir: string };
   type ImportNote = { name: string; text: string; ok: boolean };
@@ -17,10 +18,25 @@
   let importNotes = $state<ImportNote[]>([]);
   let transcript = $state<{ id: string; data: TranscriptData } | null>(null);
   let editor = $state<{ save: () => Promise<boolean> } | undefined>();
+  let view = $state<'jobs' | 'models'>('jobs');
+  let models = $state<ModelsOverview | null>(null);
+  let download = $state<DownloadProgress | null>(null);
+  let taskResult = $state<TaskResult | null>(null);
   // Сколько пакетов импорта завершилось (счётчик для автопроверки в окне).
   let batches = $state(0);
 
   const sorted = $derived(sortJobs(jobs));
+
+  let firstViewChosen = false;
+  const refreshModels = () =>
+    invoke<ModelsOverview>('models_overview').then((o) => {
+      models = o;
+      // Без установленной модели приложение сразу открывается на мастере первого запуска.
+      if (!firstViewChosen) {
+        firstViewChosen = true;
+        if (o.firstRun) view = 'models';
+      }
+    });
 
   const refresh = () =>
     invoke<Job[]>('jobs_list').then((list) => {
@@ -53,6 +69,17 @@
           batches += 1;
           void refresh();
           return;
+        case 'importNotice':
+          importNotes.push({ name: 'Внимание', text: e.message, ok: true });
+          return;
+        case 'downloadProgress':
+          download = e;
+          return;
+        case 'modelTaskDone':
+          download = null;
+          taskResult = e;
+          void refreshModels();
+          return;
         case 'flushAndClose':
           void flushAndClose();
           return;
@@ -70,6 +97,7 @@
       }
     };
     void invoke('jobs_subscribe', { onEvent: channel }).then(refresh);
+    void refreshModels();
   });
 
   // Самопроверка CSP: запрос на несуществующий домен (.invalid) должен быть заблокирован политикой
@@ -137,8 +165,26 @@
         <h1>dev-tolk</h1>
         <p class="muted">Расшифровка записей на этом компьютере, без интернета.</p>
       </div>
-      <button class="primary" onclick={pick}>Добавить файлы…</button>
+      {#if view === 'jobs'}<button class="primary" onclick={pick}>Добавить файлы…</button>{/if}
     </header>
+    <nav class="tabs">
+      <button class:active={view === 'jobs'} onclick={() => (view = 'jobs')}>Записи</button>
+      <button class:active={view === 'models'} onclick={() => (view = 'models')}>
+        Модели{#if models?.firstRun} <span class="dot" title="Нужно установить модель">●</span>{/if}
+      </button>
+    </nav>
+
+    {#if view === 'models'}
+      {#if models}
+        <ModelsScreen overview={models} progress={download} result={taskResult} onChange={refreshModels} />
+      {/if}
+    {:else}
+    {#if models?.firstRun}
+      <p class="notice">
+        Чтобы расшифровывать записи, установите модель распознавания.
+        <button class="primary" onclick={() => (view = 'models')}>Открыть «Модели»</button>
+      </p>
+    {/if}
 
     {#if importing}
       <p class="importing" role="status">
@@ -168,6 +214,8 @@
           <JobItem {job} onCancel={cancel} onRetry={retry} onDelete={remove} onOpen={open} />
         {/each}
       </ul>
+    {/if}
+
     {/if}
 
     {#if info}

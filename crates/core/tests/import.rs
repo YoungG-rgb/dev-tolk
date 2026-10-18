@@ -416,6 +416,7 @@ fn batch_import_reports_each_file_and_continues_after_a_rejection() {
             ImportEvent::ImportRejected { .. } => "rejected",
             ImportEvent::ImportBatchDone { .. } => "done",
             ImportEvent::ImportBusy => "busy",
+            ImportEvent::ImportNotice { .. } => "notice",
         })
         .collect();
     assert_eq!(kinds.first(), Some(&"started"));

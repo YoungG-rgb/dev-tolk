@@ -25,6 +25,9 @@ export type AppEvent =
   | { kind: 'importRejected'; index: number; name: string; code: string; message: string; action: string }
   | { kind: 'importBatchDone'; total: number; accepted: number; rejected: number; cancelled: boolean }
   | { kind: 'importBusy' }
+  | { kind: 'importNotice'; message: string }
+  | { kind: 'downloadProgress'; title: string; fileIndex: number; fileCount: number; downloaded: number; total: number; bytesPerSec: number }
+  | { kind: 'modelTaskDone'; ok: boolean; cancelled: boolean; message: string | null; action: string | null; suggestImport: boolean }
   | { kind: 'flushAndClose' };
 
 export type TranscriptData = {
@@ -34,3 +37,33 @@ export type TranscriptData = {
   hasEdits: boolean;
   segments: { startMs: number; endMs: number; text: string }[];
 };
+
+export type ModelInfo = {
+  id: string;
+  title: string;
+  sizeBytes: number;
+  requiredBytes: number;
+  partialBytes: number;
+  installed: boolean;
+  isDefault: boolean;
+  recommended: boolean;
+  ramEstimateMb: number | null;
+  source: string;
+  license: string;
+  note: string | null;
+  memoryWarning: string | null;
+};
+
+export type ModelsOverview = {
+  models: ModelInfo[];
+  firstRun: boolean;
+  os: string;
+  totalRamMb: number;
+  availableRamMb: number;
+  recommendation: string;
+  lowMemoryWarning: boolean;
+  busy: boolean;
+};
+
+export type DownloadProgress = { title: string; fileIndex: number; fileCount: number; downloaded: number; total: number; bytesPerSec: number };
+export type TaskResult = { ok: boolean; cancelled: boolean; message: string | null; action: string | null; suggestImport: boolean };

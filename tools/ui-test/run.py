@@ -79,11 +79,13 @@ def show(title, log):
         print(json.dumps(e, ensure_ascii=False))
 
 
-def new_data(tmp, name, models):
+def new_data(tmp, name, models, only=None):
+    """Каталог данных для прогона; модели подключаются ссылками (`only` — какие именно, по части имени файла)."""
     data = tmp / name
     (data / "models").mkdir(parents=True)
     for f in Path(models).glob("ggml-*.bin"):
-        (data / "models" / f.name).symlink_to(f)
+        if only is None or any(part in f.name for part in only):
+            (data / "models" / f.name).symlink_to(f)
     return data
 
 
@@ -121,6 +123,34 @@ def list_scenario(app, models, model, f1, tmp):
     if "L-before-delete" in steps and "L-deleted" in steps:
         at_delete = [n for t, n in dw.samples if t <= steps["L-before-delete"]]
         print(f"каталогов заданий на диске перед удалением: {at_delete[-1] if at_delete else '?'}; после: {dw.samples[-1][1]}")
+
+
+def models_scenario(app, models, f1, long_, tmp):
+    # А. Чистая установка: моделей нет.
+    data = new_data(tmp, "data-models-a", models, only=[])
+    bad = tmp / "не модель.bin"
+    bad.write_bytes(b"x" * 1000)
+    small_file = next(Path(models).glob("ggml-small-q5_1.bin"))
+    log = tmp / "models-a.log"
+    proc = launch(app, prepare("models-a.js", {"@BAD@": str(bad), "@MODELFILE@": str(small_file)}, tmp, "MA"), log, data)
+    # Скрипт 3 с ждёт на мастере и только потом импортирует; как только он сообщил о мастере, смотрим на каталог.
+    wait_step(log, "M-wizard", 60)
+    leftovers = sorted(p.name for p in (data / "models").iterdir())
+    print("каталог моделей после запуска на чистой установке (прошло около 3 с на мастере):", leftovers or "пусто")
+    wait_step(log, "M-done", 120)
+    proc.kill()
+    show("первый запуск и импорт модели", log)
+    print("после импорта в каталоге моделей:", sorted(p.name for p in (data / "models").iterdir()))
+
+    # Б. Модели small и turbo есть, компонента определения речи нет: настоящая загрузка ~1 МБ.
+    data = new_data(tmp, "data-models-b", models, only=["small-q5_1", "turbo"])
+    log = tmp / "models-b.log"
+    proc = launch(app, prepare("models-b.js", {"@MODEL@": "small-q5_1", "@F1@": f1, "@LONG@": long_}, tmp, "MB"), log, data)
+    wait_step(log, "N-done", 400)
+    proc.kill()
+    show("экран «Модели»", log)
+    print("в каталоге моделей:", sorted((p.name, "ссылка" if p.is_symlink() else f"{p.stat().st_size} Б") for p in (data / "models").iterdir()))
+    print("исходные файлы моделей целы:", all(p.exists() for p in Path(models).glob("ggml-*.bin")))
 
 
 def init_db(app, data, tmp):
@@ -295,6 +325,7 @@ def main():
         list_scenario(app, models, model, f1, tmp)
         bulk_scenario(app, models, model, tmp)
         edit_scenario(app, models, model, tmp)
+        models_scenario(app, models, f1, long_, tmp)
         w = Watcher()
         w.start()
 

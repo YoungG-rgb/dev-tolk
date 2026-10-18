@@ -31,3 +31,10 @@ export function sortJobs(jobs: Job[]): Job[] {
     return rank(a) === 2 ? b.createdAt - a.createdAt : a.createdAt - b.createdAt;
   });
 }
+
+/** Размер: «512 КБ», «190 МБ», «1,5 ГБ». */
+export function bytesText(n: number): string {
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} КБ`;
+  if (n < 1024 * 1024 * 1024) return `${Math.round(n / (1024 * 1024))} МБ`;
+  return `${(n / (1024 * 1024 * 1024)).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ГБ`;
+}
