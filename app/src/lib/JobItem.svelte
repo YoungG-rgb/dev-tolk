@@ -8,12 +8,14 @@
     onRetry,
     onDelete,
     onOpen,
+    onRate,
   }: {
     job: Job;
     onCancel: (id: string) => void;
     onRetry: (id: string) => void;
     onDelete: (id: string) => void;
     onOpen: (id: string) => void;
+    onRate: (id: string, rating: number) => void;
   } = $props();
 
   let confirming = $state(false);
@@ -23,6 +25,14 @@
   <div class="main">
     <span class="name" title={job.sourceName}>{job.sourceName}</span>
     <span class="meta">{clock(job.durationMs)} · {formatDate(job.createdAt)}{job.hasEdits ? ' · есть правки' : ''}</span>
+    {#if job.status === 'COMPLETED'}
+      <span class="rating" role="group" aria-label="Оценка качества расшифровки">
+        <span class="meta">Качество:</span>
+        {#each [1, 2, 3, 4, 5] as n}
+          <button class="star" class:on={(job.rating ?? 0) >= n} title="Оценка {n} из 5" aria-label="Оценка {n} из 5" aria-pressed={job.rating === n} onclick={() => onRate(job.id, n)}>★</button>
+        {/each}
+      </span>
+    {/if}
     {#if job.errorMessage}
       <span class="error">{job.errorMessage} {job.errorAction ?? ''}</span>
     {/if}

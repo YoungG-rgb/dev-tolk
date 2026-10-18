@@ -1,6 +1,7 @@
 //! Оболочка приложения dev-tolk (Tauri 2). На этапе MVP-012 — только каркас:
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
+mod diagnostics_commands;
 mod import_commands;
 mod models_commands;
 mod queue_commands;
@@ -88,6 +89,10 @@ macro_rules! handlers {
             queue_commands::editor_set_dirty,
             queue_commands::editor_ack_flush,
             queue_commands::editor_close_now,
+            diagnostics_commands::diagnostics_info,
+            diagnostics_commands::open_logs_dir,
+            diagnostics_commands::report_save,
+            diagnostics_commands::job_rate,
             models_commands::models_overview,
             models_commands::model_set_default,
             models_commands::model_delete,
@@ -118,6 +123,10 @@ macro_rules! handlers {
             queue_commands::editor_set_dirty,
             queue_commands::editor_ack_flush,
             queue_commands::editor_close_now,
+            diagnostics_commands::diagnostics_info,
+            diagnostics_commands::open_logs_dir,
+            diagnostics_commands::report_save,
+            diagnostics_commands::job_rate,
             models_commands::models_overview,
             models_commands::model_set_default,
             models_commands::model_delete,

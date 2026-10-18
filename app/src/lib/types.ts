@@ -8,6 +8,7 @@ export type Job = {
   progress: number;
   attempts: number;
   hasEdits: boolean;
+  rating: number | null;
   errorCode: string | null;
   errorMessage: string | null;
   errorAction: string | null;
@@ -67,3 +68,14 @@ export type ModelsOverview = {
 
 export type DownloadProgress = { title: string; fileIndex: number; fileCount: number; downloaded: number; total: number; bytesPerSec: number };
 export type TaskResult = { ok: boolean; cancelled: boolean; message: string | null; action: string | null; suggestImport: boolean };
+
+export type Diagnostics = {
+  version: string;
+  os: string;
+  arch: string;
+  dataDir: string;
+  logDir: string;
+  jobsBytes: number;
+  modelsBytes: number;
+  metricsCount: number;
+};

@@ -89,6 +89,18 @@ pub fn set_rating(conn: &Connection, job_id: &str, rating: u8) -> Result<()> {
     Ok(())
 }
 
+/// Оценки пользователя по заданиям (задание → 1–5) для показа в списке.
+pub fn ratings(conn: &Connection) -> Result<std::collections::HashMap<String, u8>> {
+    let mut stmt =
+        conn.prepare("SELECT job_id, user_rating FROM job_metrics WHERE user_rating IS NOT NULL")?;
+    let map = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u8>(1)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(map)
+}
+
 #[derive(Debug, Serialize)]
 pub struct SystemSection {
     pub os: String,

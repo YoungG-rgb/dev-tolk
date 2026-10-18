@@ -295,3 +295,49 @@ fn saved_report_is_valid_json_written_atomically() {
     )
     .is_err());
 }
+
+#[test]
+fn ratings_lists_only_rated_jobs() {
+    use tolk_core::db::Db;
+    use tolk_core::jobs::{self, NewJob};
+    use tolk_core::metrics::{ratings, record, set_rating, JobMetrics, Outcome};
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("tolk.db")).unwrap();
+    let conn = db.conn();
+    let a = jobs::insert(
+        &conn,
+        &NewJob {
+            source_name: "а".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let b = jobs::insert(
+        &conn,
+        &NewJob {
+            source_name: "б".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    for id in [&a.id, &b.id] {
+        record(
+            &conn,
+            id,
+            &JobMetrics {
+                audio_ms: 1000,
+                processing_ms: 100,
+                peak_rss_bytes: None,
+                backend: None,
+                model_id: None,
+                outcome: Outcome::Success,
+                error_code: None,
+            },
+        )
+        .unwrap();
+    }
+    set_rating(&conn, &a.id, 4).unwrap();
+    let r = ratings(&conn).unwrap();
+    assert_eq!(r.get(&a.id), Some(&4));
+    assert!(!r.contains_key(&b.id));
+}

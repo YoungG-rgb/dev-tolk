@@ -229,6 +229,63 @@ def export_scenario(app, models, model, tmp):
         print("small2.docx: таймкоды внутри:", "[00:00:00]" in x)
 
 
+def diag_scenario(app, models, model, voice, tmp):
+    import re
+    import shutil
+
+    data = new_data(tmp, "data-diag", models)
+    out = tmp / "отчёт"
+    out.mkdir()
+    secret = tmp / "ZZ-Конфиденциальная-запись-Иванов.ogg"
+    shutil.copy(voice, secret)
+    log = tmp / "diag.log"
+    proc = launch(app, prepare("diag.js", {"@MODEL@": model, "@FILE@": str(secret)}, tmp, "D"), log, data, {"TOLK_UI_TEST_EXPORT_DIR": str(out)})
+    wait_step(log, "D-done", 180)
+    proc.kill()
+    show("диагностика и отчёт", log)
+
+    reports = sorted(out.glob("dev-tolk-отчёт-*.json"))
+    print("файл отчёта:", [r.name for r in reports])
+    if not reports:
+        return
+    raw = reports[0].read_text()
+    rep = json.loads(raw)
+    print("формат:", rep["format"], rep["version"], "| ОС:", rep["system"]["os"], rep["system"]["os_version"], "| ЦП:", rep["system"]["cpu"], "| ОЗУ МБ:", rep["system"]["ram_total_mb"])
+    job = rep["jobs"][0]
+    print("задание в отчёте:", {k: v for k, v in job.items()})
+    print("сводка:", rep["summaries"])
+
+    job_dirs = list((data / "jobs").iterdir())
+    original = json.loads((job_dirs[0] / "original.json").read_text())
+    words = sorted({w.lower() for seg in original["segments"] for w in re.findall(r"[а-яёa-z]{5,}", seg["text"], re.I)})
+    print(f"слов расшифровки (5+ букв) для проверки утечек: {len(words)}")
+    leaks_report = [w for w in words if w in raw.lower()]
+    names_in_report = [n for n in ("Конфиденциальная", "Иванов", "ZZ-", secret.name) if n in raw]
+    print("в отчёте найдено слов расшифровки:", leaks_report, "| имён файла:", names_in_report)
+    logs = ""
+    for f in (data / "logs").iterdir():
+        logs += f.read_text(errors="replace").lower()
+    leaks_logs = [w for w in words if w in logs]
+    print("в журналах найдено слов расшифровки:", leaks_logs, "| размер журналов, байт:", len(logs.encode()))
+    print("имя файла в журналах (допустимо):", "конфиденциальная" in logs)
+
+    # Сверка пикового значения с внешним замером тем же движком на том же файле.
+    engine = Path(app) / "Contents/MacOS/tolk-engine"
+    mdir = data / "models"
+    model_file = mdir / f"ggml-{job['model']}.bin" if job.get("model") else None
+    if model_file and model_file.exists() and sys.platform == "darwin":
+        res = subprocess.run(
+            ["/usr/bin/time", "-l", str(engine), "transcribe", "--model", str(model_file), "--vad-model", str(next(mdir.glob("ggml-silero*.bin"))),
+             "--input", str(secret), "--output", str(tmp / "ext.json")],
+            capture_output=True, text=True,
+        )
+        m = re.search(r"(\d+)\s+peak memory footprint", res.stderr)
+        if m:
+            ext_mb = int(m.group(1)) / 1048576
+            app_mb = job["peak_rss_mb"]
+            print(f"пиковая память: отчёт приложения {app_mb} МБ, внешний замер /usr/bin/time -l {ext_mb:.0f} МБ, расхождение {abs(app_mb - ext_mb) / ext_mb * 100:.1f}%")
+
+
 def edit_scenario(app, models, model, tmp):
     import sqlite3
 
@@ -361,6 +418,7 @@ def main():
         bulk_scenario(app, models, model, tmp)
         edit_scenario(app, models, model, tmp)
         export_scenario(app, models, model, tmp)
+        diag_scenario(app, models, model, f1, tmp)
         models_scenario(app, models, f1, long_, tmp)
         w = Watcher()
         w.start()

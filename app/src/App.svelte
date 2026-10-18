@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Channel, invoke } from '@tauri-apps/api/core';
+  import DiagnosticsScreen from './lib/DiagnosticsScreen.svelte';
   import JobItem from './lib/JobItem.svelte';
   import ModelsScreen from './lib/ModelsScreen.svelte';
   import TranscriptEditor from './lib/TranscriptEditor.svelte';
@@ -18,7 +19,7 @@
   let importNotes = $state<ImportNote[]>([]);
   let transcript = $state<{ id: string; data: TranscriptData; date: string } | null>(null);
   let editor = $state<{ save: () => Promise<boolean> } | undefined>();
-  let view = $state<'jobs' | 'models'>('jobs');
+  let view = $state<'jobs' | 'models' | 'diagnostics'>('jobs');
   let models = $state<ModelsOverview | null>(null);
   let download = $state<DownloadProgress | null>(null);
   let taskResult = $state<TaskResult | null>(null);
@@ -138,6 +139,7 @@
   const cancel = (id: string) => run(() => invoke('job_cancel', { id }));
   const retry = (id: string) => run(() => invoke('job_retry', { id }));
   const remove = (id: string) => run(() => invoke('job_delete', { id }));
+  const rate = (id: string, rating: number) => run(() => invoke('job_rate', { id, rating }));
   const open = (id: string) =>
     run(async () => {
       const job = jobs.find((j) => j.id === id);
@@ -174,9 +176,12 @@
       <button class:active={view === 'models'} onclick={() => (view = 'models')}>
         Модели{#if models?.firstRun} <span class="dot" title="Нужно установить модель">●</span>{/if}
       </button>
+      <button class:active={view === 'diagnostics'} onclick={() => (view = 'diagnostics')}>Диагностика</button>
     </nav>
 
-    {#if view === 'models'}
+    {#if view === 'diagnostics'}
+      <DiagnosticsScreen {csp} />
+    {:else if view === 'models'}
       {#if models}
         <ModelsScreen overview={models} progress={download} result={taskResult} onChange={refreshModels} />
       {/if}
@@ -213,7 +218,7 @@
     {:else}
       <ul class="jobs">
         {#each sorted as job (job.id)}
-          <JobItem {job} onCancel={cancel} onRetry={retry} onDelete={remove} onOpen={open} />
+          <JobItem {job} onCancel={cancel} onRetry={retry} onDelete={remove} onOpen={open} onRate={rate} />
         {/each}
       </ul>
     {/if}
@@ -221,10 +226,7 @@
     {/if}
 
     {#if info}
-      <footer class="muted">
-        Версия {info.version} · {info.platform} ({info.arch}) · данные: {info.dataDir} · защита от сетевых запросов:
-        {csp === 'checking' ? 'проверяется…' : csp === 'blocked' ? 'активна' : 'не сработала'}
-      </footer>
+      <footer class="muted">Версия {info.version} · {info.platform} ({info.arch})</footer>
     {/if}
   {/if}
 </main>

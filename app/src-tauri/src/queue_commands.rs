@@ -59,6 +59,7 @@ pub struct JobDto {
     model_id: Option<String>,
     attempts: u32,
     has_edits: bool,
+    rating: Option<u8>,
     error_code: Option<String>,
     error_message: Option<String>,
     error_action: Option<String>,
@@ -81,6 +82,7 @@ impl From<Job> for JobDto {
             model_id: j.model_id,
             attempts: j.attempts,
             has_edits: j.has_edits,
+            rating: None,
             error_code: j.error_code,
             error_message: j.error_message,
             error_action,
@@ -121,10 +123,17 @@ pub fn engine_exe() -> Option<PathBuf> {
 #[tauri::command]
 pub fn jobs_list(store: State<'_, Arc<Store>>) -> Result<Vec<JobDto>, String> {
     let conn = store.db.conn();
+    let ratings = tolk_core::metrics::ratings(&conn).map_err(|e| user_error(&e))?;
     Ok(jobs::list(&conn)
         .map_err(|e| user_error(&e))?
         .into_iter()
-        .map(JobDto::from)
+        .map(|j| {
+            let rating = ratings.get(&j.id).copied();
+            JobDto {
+                rating,
+                ..JobDto::from(j)
+            }
+        })
         .collect())
 }
 
