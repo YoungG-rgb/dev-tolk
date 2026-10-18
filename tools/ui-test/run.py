@@ -286,6 +286,52 @@ def diag_scenario(app, models, model, voice, tmp):
             print(f"пиковая память: отчёт приложения {app_mb} МБ, внешний замер /usr/bin/time -l {ext_mb:.0f} МБ, расхождение {abs(app_mb - ext_mb) / ext_mb * 100:.1f}%")
 
 
+def glossary_scenario(app, models, tmp):
+    data = new_data(tmp, "data-gl", models, only=[])
+    out1 = tmp / "словарь-1"
+    out1.mkdir()
+    log1 = tmp / "gl1.log"
+    proc = launch(app, prepare("gl-1.js", {}, tmp, "G1"), log1, data, {"TOLK_UI_TEST_EXPORT_DIR": str(out1)})
+    wait_step(log1, "G-done", 90)
+    proc.kill()
+    proc.wait()
+    show("словарь: добавление, поиск, правка, удаление, экспорт", log1)
+    exported = out1 / "словарь.tolk-glossary.json"
+    print("файл экспорта:", exported.exists())
+    if not exported.exists():
+        return
+    doc1 = json.loads(exported.read_text())
+    print("экспорт: формат", doc1["format"], doc1["version"], "| терминов", len(doc1["terms"]), "|", [(t["term"], t["variants"], t["active"]) for t in doc1["terms"]])
+
+    bad = tmp / "не словарь.tolk-glossary.json"
+    bad.write_text("это не JSON, просто текст")
+    foreign = tmp / "чужой.tolk-glossary.json"
+    foreign.write_text(json.dumps({"format": "other-app", "version": 1, "terms": [{"term": "x"}]}))
+    huge = tmp / "огромный.tolk-glossary.json"
+    huge.write_bytes(b" " * (1024 * 1024 + 10))
+    subs = {"@EXPORTED@": str(exported), "@BAD@": str(bad), "@FOREIGN@": str(foreign), "@HUGE@": str(huge)}
+    log2 = tmp / "gl2.log"
+    proc = launch(app, prepare("gl-2.js", subs, tmp, "G2"), log2, data)
+    wait_step(log2, "G2-done", 60)
+    proc.kill()
+    proc.wait()
+    show("словарь после перезапуска, повторный импорт, плохие файлы", log2)
+
+    data3 = new_data(tmp, "data-gl3", models, only=[])
+    out3 = tmp / "словарь-3"
+    out3.mkdir()
+    log3 = tmp / "gl3.log"
+    proc = launch(app, prepare("gl-3.js", subs, tmp, "G3"), log3, data3, {"TOLK_UI_TEST_EXPORT_DIR": str(out3)})
+    wait_step(log3, "G3-done", 60)
+    proc.kill()
+    show("словарь на «другом компьютере»", log3)
+    exported3 = out3 / "словарь.tolk-glossary.json"
+    if exported3.exists():
+        doc3 = json.loads(exported3.read_text())
+        key = lambda d: sorted((t["term"], tuple(t["variants"]), t["note"], t["active"]) for t in d["terms"])
+        print("экспорт → импорт на другой машине даёт тот же набор терминов:", key(doc1) == key(doc3))
+
+
 def edit_scenario(app, models, model, tmp):
     import sqlite3
 
@@ -418,6 +464,7 @@ def main():
         bulk_scenario(app, models, model, tmp)
         edit_scenario(app, models, model, tmp)
         export_scenario(app, models, model, tmp)
+        glossary_scenario(app, models, tmp)
         diag_scenario(app, models, model, f1, tmp)
         models_scenario(app, models, f1, long_, tmp)
         w = Watcher()

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Channel, invoke } from '@tauri-apps/api/core';
   import DiagnosticsScreen from './lib/DiagnosticsScreen.svelte';
+  import GlossaryScreen from './lib/GlossaryScreen.svelte';
   import JobItem from './lib/JobItem.svelte';
   import ModelsScreen from './lib/ModelsScreen.svelte';
   import TranscriptEditor from './lib/TranscriptEditor.svelte';
@@ -19,7 +20,7 @@
   let importNotes = $state<ImportNote[]>([]);
   let transcript = $state<{ id: string; data: TranscriptData; date: string } | null>(null);
   let editor = $state<{ save: () => Promise<boolean> } | undefined>();
-  let view = $state<'jobs' | 'models' | 'diagnostics'>('jobs');
+  let view = $state<'jobs' | 'models' | 'glossary' | 'diagnostics'>('jobs');
   let models = $state<ModelsOverview | null>(null);
   let download = $state<DownloadProgress | null>(null);
   let taskResult = $state<TaskResult | null>(null);
@@ -176,10 +177,13 @@
       <button class:active={view === 'models'} onclick={() => (view = 'models')}>
         Модели{#if models?.firstRun} <span class="dot" title="Нужно установить модель">●</span>{/if}
       </button>
+      <button class:active={view === 'glossary'} onclick={() => (view = 'glossary')}>Словарь</button>
       <button class:active={view === 'diagnostics'} onclick={() => (view = 'diagnostics')}>Диагностика</button>
     </nav>
 
-    {#if view === 'diagnostics'}
+    {#if view === 'glossary'}
+      <GlossaryScreen />
+    {:else if view === 'diagnostics'}
       <DiagnosticsScreen {csp} />
     {:else if view === 'models'}
       {#if models}

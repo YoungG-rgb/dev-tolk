@@ -386,3 +386,73 @@ dd {
   margin: 0;
   word-break: break-all;
 }
+
+.glossary input[type='search'],
+.glossary input[type='text'] {
+  font: inherit;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+.glossary input[type='search'] {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.term-form {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  margin: 0.8rem 0;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+
+.term-form label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.9em;
+}
+
+.terms {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.term {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 0.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.term[data-active='false'] .name {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.term .main {
+  display: grid;
+}
+
+.term .name {
+  font-weight: 600;
+}
+
+.term .meta {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.term .actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}

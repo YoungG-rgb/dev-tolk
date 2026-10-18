@@ -79,3 +79,6 @@ export type Diagnostics = {
   modelsBytes: number;
   metricsCount: number;
 };
+
+export type Term = { id: number; term: string; variants: string[]; note: string; active: boolean };
+export type ImportSummary = { added: number; merged: number; skipped: number };

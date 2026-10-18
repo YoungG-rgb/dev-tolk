@@ -2,6 +2,7 @@
 //! окно, один экземпляр, каталог данных, журнал. Бизнес-логика добавляется позже.
 
 mod diagnostics_commands;
+mod glossary_commands;
 mod import_commands;
 mod models_commands;
 mod queue_commands;
@@ -89,6 +90,13 @@ macro_rules! handlers {
             queue_commands::editor_set_dirty,
             queue_commands::editor_ack_flush,
             queue_commands::editor_close_now,
+            glossary_commands::glossary_list,
+            glossary_commands::glossary_add,
+            glossary_commands::glossary_update,
+            glossary_commands::glossary_set_active,
+            glossary_commands::glossary_delete,
+            glossary_commands::glossary_export,
+            glossary_commands::glossary_import_pick,
             diagnostics_commands::diagnostics_info,
             diagnostics_commands::open_logs_dir,
             diagnostics_commands::report_save,
@@ -123,6 +131,13 @@ macro_rules! handlers {
             queue_commands::editor_set_dirty,
             queue_commands::editor_ack_flush,
             queue_commands::editor_close_now,
+            glossary_commands::glossary_list,
+            glossary_commands::glossary_add,
+            glossary_commands::glossary_update,
+            glossary_commands::glossary_set_active,
+            glossary_commands::glossary_delete,
+            glossary_commands::glossary_export,
+            glossary_commands::glossary_import_pick,
             diagnostics_commands::diagnostics_info,
             diagnostics_commands::open_logs_dir,
             diagnostics_commands::report_save,
@@ -137,6 +152,7 @@ macro_rules! handlers {
             import_commands::import_cancel,
             import_commands::import_paths,
             models_commands::model_import_path,
+            glossary_commands::glossary_import_path,
             ui_test::ui_test_set_default_model,
             ui_test::ui_test_report,
             ui_test::ui_test_close
