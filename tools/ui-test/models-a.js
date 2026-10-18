@@ -1,6 +1,7 @@
 // Сценарий MVP-024, чистая установка: ни одной модели. Мастер первого запуска, ничего не скачивается
 // без нажатия кнопки, импорт модели из файла (и отказ для постороннего файла).
 const text = (el) => el?.textContent.replace(/\s+/g, ' ').trim();
+const tab = (name) => [...document.querySelectorAll('.tabs button')].find((b) => b.textContent.includes(name));
 (async () => {
   try {
     await waitFor(() => q('main'), 10000, 'main');
@@ -32,6 +33,12 @@ const text = (el) => el?.textContent.replace(/\s+/g, ' ').trim();
       chips: [...document.querySelectorAll('.model[data-installed="true"] .chip')].map(text),
       tabDot: !!document.querySelector('.tabs .dot'),
     });
+    // Без сети: импортированная модель и встроенная модель определения речи — запись обрабатывается.
+    tab('Записи').click();
+    await sleep(300);
+    await enqueue('@F1@');
+    await waitFor(() => itemsWith('COMPLETED').length === 1 || itemsWith('FAILED').length === 1, 120000, 'job');
+    await rep({ step: 'M-offline-job', counts: counts(), text: text(items()[0]) });
     await rep({ step: 'M-done' });
   } catch (e) {
     await rep({ step: 'error', message: String(e) });

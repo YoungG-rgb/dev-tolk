@@ -57,6 +57,9 @@
     },
     "externalBin": [
       "binaries/tolk-engine"
+    ],
+    "resources": [
+      "resources/ggml-silero-v6.2.0.bin"
     ]
   }
 }

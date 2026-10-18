@@ -43,3 +43,6 @@ Thumbs.db
 
 # Сайдкар движка собирается tools/prepare-sidecar.sh
 /app/src-tauri/binaries/
+
+# Модель определения речи для ресурсов приложения готовит tools/prepare-sidecar.sh
+/app/src-tauri/resources/

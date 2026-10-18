@@ -11,3 +11,6 @@ cargo build --release -p tolk-engine
 mkdir -p app/src-tauri/binaries
 cp "target/release/tolk-engine${ext}" "app/src-tauri/binaries/tolk-engine-${triple}${ext}"
 echo "сайдкар: app/src-tauri/binaries/tolk-engine-${triple}${ext}"
+
+# Модель определения речи (Silero VAD, ~1 МБ) кладётся в ресурсы приложения: устанавливается из .app без сети.
+cargo run --release -q -p tolk-core --example prepare_vad -- app/src-tauri/resources

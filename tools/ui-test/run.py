@@ -132,11 +132,14 @@ def models_scenario(app, models, f1, long_, tmp):
     bad.write_bytes(b"x" * 1000)
     small_file = next(Path(models).glob("ggml-small-q5_1.bin"))
     log = tmp / "models-a.log"
-    proc = launch(app, prepare("models-a.js", {"@BAD@": str(bad), "@MODELFILE@": str(small_file)}, tmp, "MA"), log, data)
+    proc = launch(app, prepare("models-a.js", {"@BAD@": str(bad), "@MODELFILE@": str(small_file), "@F1@": f1}, tmp, "MA"), log, data)
     # Скрипт 3 с ждёт на мастере и только потом импортирует; как только он сообщил о мастере, смотрим на каталог.
     wait_step(log, "M-wizard", 60)
     leftovers = sorted(p.name for p in (data / "models").iterdir())
-    print("каталог моделей после запуска на чистой установке (прошло около 3 с на мастере):", leftovers or "пусто")
+    print("каталог моделей после запуска на чистой установке (около 3 с на мастере):", leftovers or "пусто",
+          "| только встроенная модель определения речи:", leftovers == ["ggml-silero-v6.2.0.bin"])
+    app_log = data / "logs" / "tolk.log"
+    print("в журнале запись об установке из приложения:", app_log.exists() and "установлена из приложения" in app_log.read_text())
     wait_step(log, "M-done", 120)
     proc.kill()
     show("первый запуск и импорт модели", log)
@@ -145,7 +148,8 @@ def models_scenario(app, models, f1, long_, tmp):
     # Б. Модели small и turbo есть, компонента определения речи нет: настоящая загрузка ~1 МБ.
     data = new_data(tmp, "data-models-b", models, only=["small-q5_1", "turbo"])
     log = tmp / "models-b.log"
-    proc = launch(app, prepare("models-b.js", {"@MODEL@": "small-q5_1", "@F1@": f1, "@LONG@": long_}, tmp, "MB"), log, data)
+    # Встроенную модель определения речи отключаем: нужно проверить настоящую загрузку компонента.
+    proc = launch(app, prepare("models-b.js", {"@MODEL@": "small-q5_1", "@F1@": f1, "@LONG@": long_}, tmp, "MB"), log, data, {"TOLK_UI_TEST_NO_BUNDLED_VAD": "1"})
     wait_step(log, "N-done", 400)
     proc.kill()
     show("экран «Модели»", log)

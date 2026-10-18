@@ -160,6 +160,45 @@ macro_rules! handlers {
     };
 }
 
+/// Модель определения речи (около 1 МБ) лежит внутри приложения и ставится в каталог моделей при запуске,
+/// если её там нет: для компьютеров без интернета остаётся импортировать только основную модель (TD-13).
+fn install_bundled_vad(layout: &DataLayout) {
+    use tolk_core::download::{import_from_file, is_installed, CancelToken};
+    use tolk_core::models::{find, VAD_MODEL_ID};
+
+    #[cfg(feature = "ui-test")]
+    if std::env::var_os("TOLK_UI_TEST_NO_BUNDLED_VAD").is_some() {
+        return;
+    }
+    let Some(vad) = find(VAD_MODEL_ID) else {
+        return;
+    };
+    let models_dir = layout.models_dir();
+    if is_installed(vad, &models_dir) {
+        return;
+    }
+    // Ресурсы лежат рядом с исполняемым файлом: `Contents/Resources/resources` в `.app`, `resources` на Windows.
+    // (`PathResolver::resource_dir` здесь не используется: в проверенной сборке он возвращает `UnknownPath`.)
+    let resource = std::env::current_exe().ok().and_then(|exe| {
+        let dir = exe.parent()?;
+        let base = if cfg!(target_os = "macos") {
+            dir.join("../Resources")
+        } else {
+            dir.to_path_buf()
+        };
+        Some(base.join("resources").join(&vad.file))
+    });
+    match resource {
+        Some(path) if path.is_file() => {
+            match import_from_file(&path, &models_dir, &CancelToken::new()) {
+                Ok(_) => log::info!("Модель определения речи установлена из приложения"),
+                Err(e) => log::warn!("Встроенная модель определения речи не установлена: {e}"),
+            }
+        }
+        _ => log::info!("Встроенной модели определения речи нет (режим разработки)"),
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         // Должен быть первым: второй запуск передаёт управление первому экземпляру и завершается.
@@ -191,7 +230,8 @@ pub fn run() {
             app.handle().plugin(log.build())?;
             tolk_core::diagnostics::install_panic_hook(); // паники попадают в журнал
 
-            let (store, cleanup) = Store::open(layout)?;
+            let (store, cleanup) = Store::open(layout.clone())?;
+            install_bundled_vad(&layout);
             log::info!(
                 "Хранилище открыто, версия схемы {}; очистка при старте: прерванных заданий {}, временных файлов {}, каталогов без записи {}",
                 store.db.schema_version()?,
