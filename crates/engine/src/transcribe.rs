@@ -125,6 +125,32 @@ fn install_cancel_handler() {
     }
 }
 
+/// Сколько после сигнала отмены даём распознаванию остановиться самому, прежде чем завершить процесс.
+#[cfg(unix)]
+const CANCEL_GRACE: std::time::Duration = std::time::Duration::from_millis(1000);
+
+/// Страховка отмены: whisper.cpp проверяет флаг прерывания только между узлами графа, а на CPU один узел
+/// (кодировщик, свёртка, BLAS) может длиться секундами (на CPU виртуальной машины CI отмена занимала 15 с).
+/// Если процесс не завершился за `CANCEL_GRACE`, сообщаем об отмене и выходим сами. Итоговый файл пишется
+/// атомарно и только после распознавания, поэтому потерять и испортить при этом нечего.
+#[cfg(unix)]
+fn spawn_cancel_watchdog() {
+    std::thread::spawn(|| {
+        while !CANCELLED.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        std::thread::sleep(CANCEL_GRACE);
+        crate::emit(&crate::Event::Error {
+            code: ErrorCode::Cancelled,
+            message: "Обработка отменена",
+            codec: None,
+        });
+        // `_exit`, а не `exit`: обработчики atexit ggml при работающем распознавании падают сигналом.
+        // SAFETY: немедленное завершение процесса без очистки.
+        unsafe { libc::_exit(ErrorCode::Cancelled.exit_code()) }
+    });
+}
+
 #[cfg(not(unix))]
 fn install_cancel_handler() {}
 
@@ -157,6 +183,8 @@ fn watch_parent_stdin() {
 pub fn run(args: &Args) -> Result<Outcome> {
     let started = Instant::now();
     install_cancel_handler();
+    #[cfg(unix)]
+    spawn_cancel_watchdog();
     if args.exit_on_stdin_close {
         watch_parent_stdin();
     }

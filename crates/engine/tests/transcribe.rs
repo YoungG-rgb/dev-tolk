@@ -375,7 +375,9 @@ fn transcribes_synthetic_russian_speech_with_correct_protocol_and_file() {
     }
     assert!(done["elapsed_ms"].as_u64().unwrap() >= done["recognize_ms"].as_u64().unwrap());
     if cfg!(target_os = "macos") {
-        assert_eq!(done["backend"], "metal");
+        // В CI GPU отключён переменной TOLK_NO_GPU (виртуальная машина), тогда честный ответ — «cpu».
+        let no_gpu = std::env::var("TOLK_NO_GPU").is_ok_and(|v| !v.is_empty() && v != "0");
+        assert_eq!(done["backend"], if no_gpu { "cpu" } else { "metal" });
         assert!(
             done["peak_rss_bytes"].as_u64().unwrap() > 100_000_000,
             "пиковая память не измерена: {done}"
